@@ -1582,6 +1582,18 @@ export default function MyProduceDashboard() {
   };
 
   const addLARow = () => setLaRows([...laRows, createEmptyLARow()]);
+  const copyLARow = (row: LARow) => setLaRows([...laRows, { ...row, id: Math.random().toString(36).substr(2, 9) }]);
+  const isLARowFilled = (row: LARow) => Boolean(
+    row.farm ||
+    row.pol ||
+    row.pod ||
+    row.shippingLine ||
+    row.cutOffDate ||
+    row.etd ||
+    row.totalVans ||
+    row.sku ||
+    row.palletization
+  );
   const addBookingRow = () => setBookingRows([...bookingRows, createEmptyBookingRow()]);
 
   const addTripRow = () => {
@@ -4191,12 +4203,14 @@ export default function MyProduceDashboard() {
                       </Badge>
                     </TableCell>
                     <TableCell className="px-3 py-3 text-right">
-                      <Button
-                        className="h-8 rounded-sm bg-emerald-700 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-white hover:bg-emerald-800"
-                        onClick={() => openBookingBatchModal((contracts || []).find((contract: any) => contract.id === row.id) || null)}
-                      >
-                        Create Booking
-                      </Button>
+                      {row.workflowStage !== 'BOOKINGS_CREATED' && (
+                        <Button
+                          className="h-8 rounded-sm bg-emerald-700 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-white hover:bg-emerald-800"
+                          onClick={() => openBookingBatchModal((contracts || []).find((contract: any) => contract.id === row.id) || null)}
+                        >
+                          Create Booking
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))
@@ -4473,15 +4487,28 @@ export default function MyProduceDashboard() {
                             </Select>
                           </TableCell>
                           <TableCell className="px-3 py-3 align-top text-center">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-10 w-10 text-red-500 hover:bg-red-50 hover:text-red-600"
-                              onClick={() => setLaRows(laRows.filter((r) => r.id !== row.id))}
-                              disabled={laRows.length === 1}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            <div className="inline-flex items-center justify-center gap-1">
+                              {isLARowFilled(row) && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  title="Copy this row"
+                                  className="h-10 w-10 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                                  onClick={() => copyLARow(row)}
+                                >
+                                  <Copy className="h-4 w-4" />
+                                </Button>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-10 w-10 text-red-500 hover:bg-red-50 hover:text-red-600"
+                                onClick={() => setLaRows(laRows.filter((r) => r.id !== row.id))}
+                                disabled={laRows.length === 1}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -4725,15 +4752,15 @@ export default function MyProduceDashboard() {
             </div>
 
             <ScrollArea className="flex-1 min-h-0">
-              <div className="space-y-6 px-6 py-5">
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Customer</Label>
+              <div className="space-y-4 px-4 py-4">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label className="text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-400">Customer</Label>
                     <Select
                       value={cosHeader.customerName}
                       onValueChange={(value) => setCosHeader({ ...cosHeader, customerName: value })}
                     >
-                      <SelectTrigger className="h-11 rounded-sm border-slate-300 bg-white shadow-sm">
+                      <SelectTrigger className="h-9 rounded-sm border-slate-300 bg-white shadow-sm">
                         <SelectValue placeholder="Select Customer" />
                       </SelectTrigger>
                       <SelectContent>
@@ -4745,16 +4772,16 @@ export default function MyProduceDashboard() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Week No</Label>
+                  <div className="space-y-1">
+                    <Label className="text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-400">Week No</Label>
                     <Input
                       value={cosHeader.weekNumber}
                       onChange={(e) => setCosHeader({ ...cosHeader, weekNumber: e.target.value })}
-                      className="h-11 rounded-sm border-slate-300 bg-white shadow-sm"
+                      className="h-9 rounded-sm border-slate-300 bg-white shadow-sm"
                     />
                   </div>
-                  <div className="space-y-2 md:col-span-1">
-                    <Label className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">POD</Label>
+                  <div className="space-y-1 md:col-span-1">
+                    <Label className="text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-400">POD</Label>
                     <Select
                       value={cosHeader.pod}
                       onValueChange={(value) => {
@@ -4776,16 +4803,16 @@ export default function MyProduceDashboard() {
                   </div>
                 </div>
 
-                <div className="rounded-sm border border-slate-200 bg-slate-50/60 p-4 shadow-sm">
-                  <div className="mb-4 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-300">Containers Allocated</div>
-                  <div className="flex flex-wrap items-stretch justify-between gap-4">
-                    <div className="flex flex-wrap gap-3">
+                <div className="rounded-sm border border-slate-200 bg-slate-50/60 p-3 shadow-sm">
+                  <div className="mb-3 text-[9px] font-semibold uppercase tracking-[0.22em] text-slate-300">Containers Allocated</div>
+                  <div className="flex flex-wrap items-stretch justify-between gap-3">
+                    <div className="flex flex-wrap gap-2">
                       {cosSummary.length > 0 ? (
                         cosSummary.slice(0, 3).map((item) => (
                           <Card key={item.pod} className="min-w-[140px] rounded-sm border-slate-200 bg-white shadow-sm">
-                            <CardContent className="p-4">
-                              <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-300">{item.pod}</div>
-                              <div className="mt-1 text-xl font-black text-slate-900">
+                            <CardContent className="p-3">
+                              <div className="text-[8px] font-semibold uppercase tracking-[0.16em] text-slate-300">{item.pod}</div>
+                              <div className="mt-1 text-lg font-black text-slate-900">
                                 {item.allocated}/{item.total || 0}
                               </div>
                             </CardContent>
@@ -4814,34 +4841,34 @@ export default function MyProduceDashboard() {
                   <Table>
                     <TableHeader className="bg-slate-100/80">
                       <TableRow className="hover:bg-transparent">
-                        <TableHead className="w-12 px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">#</TableHead>
-                        <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">PS</TableHead>
-                        <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Shipping Line</TableHead>
-                        <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Booking No</TableHead>
-                        <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Container No</TableHead>
-                        <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">ATW Status</TableHead>
-                        <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">POD</TableHead>
-                        <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Cut-Off Date</TableHead>
-                        <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">ETD</TableHead>
-                        <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">SKU</TableHead>
-                        <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Palletization</TableHead>
-                        <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 text-center">Actions</TableHead>
+                        <TableHead className="w-12 px-2 py-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">#</TableHead>
+                        <TableHead className="px-2 py-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">PS</TableHead>
+                        <TableHead className="px-2 py-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">Shipping Line</TableHead>
+                        <TableHead className="px-2 py-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">Booking No</TableHead>
+                        <TableHead className="px-2 py-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">Container No</TableHead>
+                        <TableHead className="px-2 py-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">ATW Status</TableHead>
+                        <TableHead className="px-2 py-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">POD</TableHead>
+                        <TableHead className="px-2 py-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">Cut-Off Date</TableHead>
+                        <TableHead className="px-2 py-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">ETD</TableHead>
+                        <TableHead className="px-2 py-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">SKU</TableHead>
+                        <TableHead className="px-2 py-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">Palletization</TableHead>
+                        <TableHead className="px-2 py-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500 text-center">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {cosRows.map((row, index) => (
-                        <TableRow key={row.id} className="h-14 hover:bg-transparent">
-                          <TableCell className="px-3 py-3 align-top text-sm font-bold text-slate-500">{index + 1}</TableCell>
-                          <TableCell className="px-3 py-3 align-top">
+                        <TableRow key={row.id} className="h-12 hover:bg-transparent">
+                          <TableCell className="px-2 py-2 align-top text-[11px] font-semibold text-slate-500">{index + 1}</TableCell>
+                          <TableCell className="px-2 py-2 align-top">
                             <Input
                               value={row.ps}
                               onChange={(e) => setCosRows(cosRows.map((r) => (r.id === row.id ? { ...r, ps: e.target.value } : r)))}
-                              className="h-10 rounded-sm border-slate-300 bg-white shadow-sm"
+                              className="h-8 rounded-sm border-slate-300 bg-white shadow-sm text-sm"
                             />
                           </TableCell>
-                          <TableCell className="px-3 py-3 align-top">
+                          <TableCell className="px-2 py-2 align-top">
                             <Select value={row.shippingLine} onValueChange={(v) => setCosRows(cosRows.map((r) => (r.id === row.id ? { ...r, shippingLine: v } : r)))}>
-                              <SelectTrigger className="h-10 rounded-sm border-slate-300 bg-white shadow-sm">
+                              <SelectTrigger className="h-8 rounded-sm border-slate-300 bg-white shadow-sm text-sm">
                                 <SelectValue placeholder="Select" />
                               </SelectTrigger>
                               <SelectContent>
@@ -4857,7 +4884,7 @@ export default function MyProduceDashboard() {
                               </SelectContent>
                             </Select>
                           </TableCell>
-                          <TableCell className="px-3 py-3 align-top">
+                          <TableCell className="px-2 py-2 align-top">
                             <Select
                               value={row.bookingNumber}
                               onValueChange={(v) => {
@@ -4875,7 +4902,7 @@ export default function MyProduceDashboard() {
                                 );
                               }}
                             >
-                              <SelectTrigger className="h-10 rounded-sm border-slate-300 bg-white shadow-sm">
+                              <SelectTrigger className="h-8 rounded-sm border-slate-300 bg-white shadow-sm text-sm">
                                 <SelectValue placeholder="Select Booking No" />
                               </SelectTrigger>
                               <SelectContent>
@@ -4887,12 +4914,12 @@ export default function MyProduceDashboard() {
                               </SelectContent>
                             </Select>
                           </TableCell>
-                          <TableCell className="px-3 py-3 align-top">
+                          <TableCell className="px-2 py-2 align-top">
                             <Select
                               value={row.containerNo}
                               onValueChange={(v) => setCosRows(cosRows.map((r) => (r.id === row.id ? { ...r, containerNo: v } : r)))}
                             >
-                              <SelectTrigger className="h-10 rounded-sm border-slate-300 bg-white shadow-sm">
+                              <SelectTrigger className="h-8 rounded-sm border-slate-300 bg-white shadow-sm text-sm">
                                 <SelectValue placeholder="Select Container No" />
                               </SelectTrigger>
                               <SelectContent>
@@ -4908,12 +4935,12 @@ export default function MyProduceDashboard() {
                               </SelectContent>
                             </Select>
                           </TableCell>
-                          <TableCell className="px-3 py-3 align-top">
+                          <TableCell className="px-2 py-2 align-top">
                             <Badge
                               variant="outline"
                               onClick={() => setCosRows(cosRows.map((r) => (r.id === row.id ? { ...r, atwStatus: r.atwStatus === 'PENDING' ? 'READY' : r.atwStatus === 'READY' ? 'LOADED' : 'PENDING' } : r)))}
                               className={cn(
-                                'cursor-pointer border px-2 py-1 text-[10px] font-bold',
+                                'cursor-pointer border px-2 py-1 text-[9px] font-semibold',
                                 row.atwStatus === 'PENDING' && 'border-red-200 bg-red-50 text-red-600',
                                 row.atwStatus === 'READY' && 'border-amber-200 bg-amber-50 text-amber-600',
                                 row.atwStatus === 'LOADED' && 'border-emerald-200 bg-emerald-50 text-emerald-700'
@@ -4922,9 +4949,9 @@ export default function MyProduceDashboard() {
                               {row.atwStatus}
                             </Badge>
                           </TableCell>
-                          <TableCell className="px-3 py-3 align-top">
+                          <TableCell className="px-2 py-2 align-top">
                             <Select value={row.pod} onValueChange={(v) => setCosRows(cosRows.map((r) => (r.id === row.id ? { ...r, pod: v } : r)))}>
-                              <SelectTrigger className="h-10 rounded-sm border-slate-300 bg-white shadow-sm">
+                              <SelectTrigger className="h-8 rounded-sm border-slate-300 bg-white shadow-sm text-sm">
                                 <SelectValue placeholder="Select" />
                               </SelectTrigger>
                               <SelectContent>
@@ -4936,33 +4963,33 @@ export default function MyProduceDashboard() {
                               </SelectContent>
                             </Select>
                           </TableCell>
-                          <TableCell className="px-3 py-3 align-top">
+                          <TableCell className="px-2 py-2 align-top">
                             <Input
                               type="date"
                               value={row.cutOffDate}
                               onChange={(e) => setCosRows(cosRows.map((r) => (r.id === row.id ? { ...r, cutOffDate: e.target.value } : r)))}
-                              className="h-10 rounded-sm border-slate-300 bg-white shadow-sm text-xs"
+                              className="h-8 rounded-sm border-slate-300 bg-white shadow-sm text-[11px]"
                             />
                           </TableCell>
-                          <TableCell className="px-3 py-3 align-top">
+                          <TableCell className="px-2 py-2 align-top">
                             <Input
                               type="date"
                               value={row.etd}
                               onChange={(e) => setCosRows(cosRows.map((r) => (r.id === row.id ? { ...r, etd: e.target.value } : r)))}
-                              className="h-10 rounded-sm border-slate-300 bg-white shadow-sm text-xs"
+                              className="h-8 rounded-sm border-slate-300 bg-white shadow-sm text-[11px]"
                             />
                           </TableCell>
-                          <TableCell className="px-3 py-3 align-top">
+                          <TableCell className="px-2 py-2 align-top">
                             <Input
                               value={row.sku}
                               onChange={(e) => setCosRows(cosRows.map((r) => (r.id === row.id ? { ...r, sku: e.target.value } : r)))}
                               placeholder="SKU"
-                              className="h-10 rounded-sm border-slate-300 bg-white shadow-sm"
+                              className="h-8 rounded-sm border-slate-300 bg-white shadow-sm text-sm"
                             />
                           </TableCell>
-                          <TableCell className="px-3 py-3 align-top">
+                          <TableCell className="px-2 py-2 align-top">
                             <Select value={normalizePalletization(row.palletization)} onValueChange={(v) => setCosRows(cosRows.map((r) => (r.id === row.id ? { ...r, palletization: normalizePalletization(v) } : r)))}>
-                              <SelectTrigger className="h-10 rounded-sm border-slate-300 bg-white shadow-sm">
+                              <SelectTrigger className="h-8 rounded-sm border-slate-300 bg-white shadow-sm text-sm">
                                 <SelectValue placeholder="Select" />
                               </SelectTrigger>
                               <SelectContent>
@@ -4971,11 +4998,11 @@ export default function MyProduceDashboard() {
                               </SelectContent>
                             </Select>
                           </TableCell>
-                          <TableCell className="px-3 py-3 align-top text-center">
+                          <TableCell className="px-2 py-2 align-top text-center">
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-10 w-10 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                              className="h-9 w-9 text-slate-400 hover:bg-red-50 hover:text-red-600"
                               onClick={() => setCosRows(cosRows.filter((r) => r.id !== row.id))}
                               disabled={cosRows.length === 1}
                             >
@@ -4990,11 +5017,11 @@ export default function MyProduceDashboard() {
               </div>
             </ScrollArea>
 
-            <div className="border-t border-slate-200 bg-white px-6 py-4">
-              <div className="mb-5">
+            <div className="border-t border-slate-200 bg-white px-4 py-3">
+              <div className="mb-3">
                 <Button
                   variant="ghost"
-                  className="h-9 px-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
+                  className="h-8 px-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
                   onClick={() =>
                     setCosRows((rows) => [
                       ...rows,
@@ -5002,19 +5029,19 @@ export default function MyProduceDashboard() {
                     ])
                   }
                 >
-                  <Plus className="mr-2 h-4 w-4" />
+                  <Plus className="mr-2 h-3.5 w-3.5" />
                   Add Row
                 </Button>
               </div>
-              <div className="flex items-center justify-between">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-[9px] font-semibold uppercase tracking-[0.22em] text-slate-400">
                   System audit: action will be logged under UID-4412
                 </div>
-                <div className="flex items-center gap-3">
-                  <Button variant="outline" onClick={() => setIsCosModalOpen(false)} className="h-10 rounded-sm border-slate-300 px-6 text-xs font-bold uppercase tracking-[0.18em] text-slate-700">
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" onClick={() => setIsCosModalOpen(false)} className="h-9 rounded-sm border-slate-300 px-4 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-700">
                     Cancel
                   </Button>
-                  <Button className="h-10 rounded-sm bg-emerald-700 px-6 text-xs font-bold uppercase tracking-[0.18em] text-white shadow-sm hover:bg-emerald-800" onClick={handleSaveCOS}>
+                  <Button className="h-9 rounded-sm bg-emerald-700 px-4 text-[10px] font-semibold uppercase tracking-[0.16em] text-white shadow-sm hover:bg-emerald-800" onClick={handleSaveCOS}>
                     Submit
                   </Button>
                 </div>
