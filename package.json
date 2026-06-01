@@ -9,7 +9,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "clean:firestore": "node scripts/clean-firestore.mjs"
   },
   "dependencies": {
     "@genkit-ai/google-genai": "^1.28.0",

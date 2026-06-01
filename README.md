@@ -48,3 +48,6 @@ npm run dev
 ```
 
 The application is configured to connect to Firebase production services.
+
+# cleanup firestore command
+$env:CLEAN_FIRESTORE='yes'; node scripts/clean-firestore.mjs
