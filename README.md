@@ -3,7 +3,7 @@
 This is a Next.js application built for TADECO/ANFLOCOR to manage international logistics and agricultural production workflows.
 
 ## Features
-
+ 
 - **Loading Advice (LA)**: Batch entry system for production requirements.
 - **Cutting Orders (CO)**: POD-based container allocation tracking.
 - **Bookings**: Voyage and vessel confirmation management.
