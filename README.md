@@ -1,5 +1,5 @@
 # ANFLOCOR Logistics Management System
- 
+
 This is a Next.js application built for TADECO/ANFLOCOR to manage international logistics and agricultural production workflows.
 
 ## Features
