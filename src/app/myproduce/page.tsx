@@ -2,12 +2,12 @@
 "use client";
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { 
-  LayoutDashboard, 
-  Settings, 
-  Package, 
-  Truck, 
-  BarChart3, 
+import {
+  LayoutDashboard,
+  Settings,
+  Package,
+  Truck,
+  BarChart3,
   User,
   LogOut,
   Leaf,
@@ -22,32 +22,6 @@ import {
   Loader2,
   Trash2,
   Search,
-  FileText,
-  Plus,
-  FileCheck,
-  Sparkles,
-  Paperclip,
-  MapPin,
-  Ship,
-  FileSignature,
-  Mail,
-  Check,
-  Calendar as CalendarIcon,
-  Save,
-  Edit2,
-  CheckSquare,
-  Square,
-  MoreVertical,
-  X,
-  Split,
-  Copy,
-  Printer,
-  Download,
-  FileSpreadsheet,
-  RefreshCcw,
-  ChevronDown,
-  ChevronLeft,
-  Bell,
   HelpCircle,
   Filter,
   Info,
@@ -61,7 +35,22 @@ import {
   Camera,
   Image as ImageIcon,
   LayoutGrid,
-  Signature
+  Signature,
+  Bell,
+  Plus,
+  RefreshCcw,
+  MoreVertical,
+  FileText,
+  ChevronLeft,
+  X,
+  Download,
+  ChevronDown,
+  Check,
+  Ship,
+  FileCheck,
+  FileSignature,
+  Copy,
+  CheckSquare
 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -260,6 +249,7 @@ interface CORow {
   sku: string;
   palletization: string;
   containerNo: string;
+  originalContainerNo?: string;
   shippingLine: string;
   bookingNo: string;
   atwStatus: 'PENDING' | 'READY' | 'LOADED';
@@ -422,6 +412,7 @@ export default function MyProduceDashboard() {
   const [isCosModalOpen, setIsCosModalOpen] = useState(false);
   const [weekFilter, setWeekFilter] = useState<string>('all');
   const [customerFilter, setCustomerFilter] = useState<string>('all');
+  const [bookingFilter, setBookingFilter] = useState<string>('all');
   const [tripStatusFilter, setTripStatusFilter] = useState<'all' | 'shipped'>('all');
   const [selectedCuttingOrderKeys, setSelectedCuttingOrderKeys] = useState<string[]>([]);
   const [isBulkCuttingStatusModalOpen, setIsBulkCuttingStatusModalOpen] = useState(false);
@@ -1057,6 +1048,22 @@ export default function MyProduceDashboard() {
     });
   }, [bookingListRows, weekFilter, customerFilter]);
 
+  const bookingNumberFilterOptions = useMemo(() => {
+    const uniqueNumbers = new Set<string>();
+    filteredBookingRows.forEach((row) => {
+      if (row.bookingNumber && row.bookingNumber !== '--') {
+        uniqueNumbers.add(row.bookingNumber);
+      }
+    });
+    return Array.from(uniqueNumbers).sort((a, b) => a.localeCompare(b));
+  }, [filteredBookingRows]);
+
+  useEffect(() => {
+    if (bookingFilter !== 'all' && !bookingNumberFilterOptions.includes(bookingFilter)) {
+      setBookingFilter('all');
+    }
+  }, [bookingFilter, bookingNumberFilterOptions]);
+
   const bookingShippingLineOptions = useMemo(() => {
     return Array.from(
       new Set(
@@ -1142,9 +1149,11 @@ export default function MyProduceDashboard() {
       const matchesStatus =
         tripStatusFilter === 'all' ||
         (tripStatusFilter === 'shipped' && (tripStatus === 'DEPART' || tripStatus === 'SHIPPED'));
-      return matchesStatus;
+      const bookingNumber = String(trip?.bookingNo || trip?.bookingNumber || '').trim();
+      const matchesBooking = bookingFilter === 'all' || bookingNumber === bookingFilter;
+      return matchesStatus && matchesBooking;
     });
-  }, [trips, tripStatusFilter]);
+  }, [trips, tripStatusFilter, bookingFilter]);
 
   useEffect(() => {
     setVlsSavedTripIds(
@@ -1643,7 +1652,8 @@ export default function MyProduceDashboard() {
                   taskDate: '',
                   sku: co.sku || '',
                   palletization: co.palletization || '',
-                  containerNo: co.containerNo || '',
+                          containerNo: co.containerNo || '',
+                          originalContainerNo: co.containerNo || '',
                   shippingLine: co.shippingLine || newTripHeader.shippingLine || '',
                   bookingNo: co.bookingNo || newTripHeader.bookingNo || '',
                   atwStatus: co.atwStatus || 'PENDING'
@@ -1670,27 +1680,30 @@ export default function MyProduceDashboard() {
   const handleSubmitTripBatch = async () => {
     if (!db) return;
     try {
-      const normalizedCuttingOrders = bindCoRows.map((row, index) => ({
-        itemId: row.id || `CO-${Date.now()}-${index}`,
-        ps: row.ps || String(index + 1),
-        pod: row.pod || newTripHeader.pod || '',
-        status: normalizeCuttingOrderStatus(row.status),
-        cutOffDate: row.cutOffDate || '',
-        etd: row.etd || '',
-        taskDate: row.taskDate || '',
-        sku: row.sku || '',
-        palletization: row.palletization || '',
-        containerNo: row.containerNo || '',
-        shippingLine: row.shippingLine || newTripHeader.shippingLine || '',
-        bookingNo: row.bookingNo || newTripHeader.bookingNo || '',
-        bookingBatchId: newTripHeader.bookingBatchId || '',
-        laId: newTripHeader.laId || '',
-        atwStatus: row.atwStatus || 'PENDING',
-      }));
-
       const batch = writeBatch(db);
       tripRows.forEach((row, index) => {
         const uniqueId = `TRIP-${Date.now()}-${index}`;
+        const boundOrders = row.containerNo ? bindCoRows.filter((order) => order.containerNo === row.containerNo) : [];
+        // Only create a trip if there are bound cutting orders for this container
+        if (!row.containerNo || boundOrders.length === 0) return;
+        const normalizedCuttingOrders = boundOrders.map((order, coIndex) => ({
+          itemId: order.id || `CO-${Date.now()}-${coIndex}`,
+          tripId: uniqueId,
+          ps: order.ps || String(coIndex + 1),
+          pod: order.pod || newTripHeader.pod || '',
+          status: normalizeCuttingOrderStatus(order.status),
+          cutOffDate: order.cutOffDate || '',
+          etd: order.etd || '',
+          taskDate: order.taskDate || '',
+          sku: order.sku || '',
+          palletization: order.palletization || '',
+          containerNo: order.containerNo || '',
+          shippingLine: order.shippingLine || newTripHeader.shippingLine || '',
+          bookingNo: order.bookingNo || newTripHeader.bookingNo || '',
+          bookingBatchId: newTripHeader.bookingBatchId || '',
+          laId: newTripHeader.laId || '',
+          atwStatus: order.atwStatus || 'PENDING',
+        }));
         const docRef = doc(db, TRIP_PATH, uniqueId);
         batch.set(docRef, {
           tripId: uniqueId,
@@ -1727,6 +1740,21 @@ export default function MyProduceDashboard() {
         });
       });
       await batch.commit();
+
+      if (newTripHeader.laId && Array.isArray(contracts)) {
+        const contract = (contracts as any).find((item: any) => item.id === newTripHeader.laId);
+        if (contract && Array.isArray(contract.cuttingOrders) && contract.cuttingOrders.length > 0) {
+          const updatedContractRows = contract.cuttingOrders.map((co: any) => {
+            const boundRow = bindCoRows.find((row) => row.id === (co.itemId || co.id));
+            if (boundRow && boundRow.containerNo) {
+              return { ...co, containerNo: boundRow.containerNo };
+            }
+            return co;
+          });
+          await persistCuttingOrderContractRows(contract.id, updatedContractRows);
+        }
+      }
+
       toast({ title: "Trips Created", description: "Successfully logged new trip batch." });
       setIsNewTripOpen(false);
       setTripStep(1);
@@ -3297,15 +3325,16 @@ export default function MyProduceDashboard() {
             className="h-10 px-6 bg-anflocor-green text-white font-bold uppercase text-xs tracking-widest gap-2"
             onClick={() => {
               setTripStep(1);
+              const selectedBooking = bookingFilter !== 'all' ? bookingListRows.find((bk: any) => bk.bookingNumber === bookingFilter) : undefined;
               setNewTripHeader({
-                customerName: '',
-                weekNumber: '',
-                bookingNo: '',
-                bookingBatchId: '',
-                laId: '',
-                shippingLine: '',
-                vessel: '',
-                pod: '',
+                customerName: customerFilter !== 'all' ? customerFilter : '',
+                weekNumber: weekFilter !== 'all' ? weekFilter : '',
+                bookingNo: bookingFilter !== 'all' ? bookingFilter : '',
+                bookingBatchId: selectedBooking?.batchId || '',
+                laId: selectedBooking?.laId || '',
+                shippingLine: selectedBooking?.shippingLine || '',
+                vessel: selectedBooking?.vesselName || '',
+                pod: selectedBooking?.pod || '',
               });
               setTripRows([{
                 id: Math.random().toString(36).substr(2, 9),
@@ -3354,9 +3383,18 @@ export default function MyProduceDashboard() {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="p-6 border-b flex justify-between items-center">
+        <div className="p-6 border-b flex flex-wrap items-center justify-between gap-3">
           <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">RECENT TRIP MANIFESTS</h3>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={bookingFilter} onValueChange={setBookingFilter}>
+              <SelectTrigger className="w-[260px] h-10 bg-white"><SelectValue placeholder="All Booking Nos" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Booking Nos</SelectItem>
+                {bookingNumberFilterOptions.map((bookingNumber) => (
+                  <SelectItem key={bookingNumber} value={bookingNumber}>{bookingNumber}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button variant="outline" className="h-8 px-3 text-[10px] font-black uppercase tracking-widest border-gray-100 gap-2"><Filter className="h-3 w-3" /> FILTER</Button>
             <Button variant="outline" className="h-8 px-3 text-[10px] font-black uppercase tracking-widest border-gray-100 gap-2"><Download className="h-3 w-3" /> EXPORT</Button>
           </div>
@@ -5951,7 +5989,7 @@ export default function MyProduceDashboard() {
                       else setNewTripHeader({...newTripHeader, bookingNo: val, bookingBatchId: '', laId: ''});
                     }}>
                       <SelectTrigger className="h-10"><SelectValue placeholder="--Select--" /></SelectTrigger>
-                      <SelectContent>{bookingNumberOptions.map((bookingNumber) => (<SelectItem key={bookingNumber} value={bookingNumber}>{bookingNumber}</SelectItem>))}</SelectContent>
+                      <SelectContent>{bookingNumberFilterOptions.map((bookingNumber) => (<SelectItem key={bookingNumber} value={bookingNumber}>{bookingNumber}</SelectItem>))}</SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-gray-300">Shipping Line</Label><Input className="h-10 bg-white" value={newTripHeader.shippingLine} readOnly /></div>
@@ -6019,7 +6057,11 @@ export default function MyProduceDashboard() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {bindCoRows.map((row, index) => (
+                    {bindCoRows.map((row, index) => {
+                      const isPreBound = Boolean(row.originalContainerNo);
+                      const usedContainers = bindCoRows.map(r => r.containerNo).filter(Boolean);
+                      const value = row.containerNo || row.originalContainerNo || '';
+                      return (
                       <TableRow key={row.id}>
                         <TableCell className="text-[11px] font-bold text-gray-400">{index + 1}</TableCell>
                         <TableCell><Input className="h-9 bg-gray-50 border shadow-sm font-medium w-20" value={row.ps} readOnly/></TableCell>
@@ -6030,9 +6072,38 @@ export default function MyProduceDashboard() {
                         <TableCell><Input className="h-9 bg-gray-50 border shadow-sm font-medium w-24" value={row.sku} readOnly/></TableCell>
                         <TableCell><Input className="h-9 bg-gray-50 border shadow-sm font-medium w-28" value={row.palletization} readOnly/></TableCell>
                         <TableCell>
-                          <Select value={row.containerNo} onValueChange={(val) => setBindCoRows(bindCoRows.map(r => r.id === row.id ? { ...r, containerNo: val } : r))}>
-                            <SelectTrigger className="h-9 bg-white border shadow-sm font-bold w-40"><SelectValue placeholder="Select Container" /></SelectTrigger>
-                            <SelectContent>{tripRows.filter(tr => tr.containerNo).map(tr => (<SelectItem key={tr.id} value={tr.containerNo}>{tr.containerNo}</SelectItem>))}</SelectContent>
+                          <Select
+                            value={value}
+                            disabled={isPreBound}
+                            onValueChange={(val) => setBindCoRows(bindCoRows.map(r => r.id === row.id ? { ...r, containerNo: val === '__unbind__' ? '' : val } : r))}
+                          >
+                            <SelectTrigger className={cn(
+                              'h-9 border shadow-sm font-bold w-40',
+                              value ? 'bg-slate-100 text-gray-500' : 'bg-white'
+                            )}>
+                              <SelectValue placeholder="Select Container" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {(() => {
+                                if (isPreBound) {
+                                  const val = row.originalContainerNo || row.containerNo || '';
+                                  return [<SelectItem key={val} value={val}>{val}</SelectItem>];
+                                }
+                                if (row.containerNo) {
+                                  return [
+                                    <SelectItem key={row.containerNo} value={row.containerNo}>{row.containerNo}</SelectItem>,
+                                    <SelectItem key="__unbind__" value="__unbind__">— Unbind —</SelectItem>
+                                  ];
+                                }
+                                const options = tripRows
+                                  .map(tr => tr.containerNo)
+                                  .filter(Boolean)
+                                  .filter((c) => !usedContainers.includes(c));
+                                return options.map((c) => (
+                                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                                ));
+                              })()}
+                            </SelectContent>
                           </Select>
                         </TableCell>
                         <TableCell className="text-center">
@@ -6048,9 +6119,12 @@ export default function MyProduceDashboard() {
                             {row.status || 'PENDING'}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-center"><Button variant="ghost" size="icon" className="text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => setBindCoRows(bindCoRows.filter(r => r.id !== row.id))}><Trash2 className="h-4 w-4" /></Button></TableCell>
+                        <TableCell className="text-center">
+                          <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => setBindCoRows(bindCoRows.filter(r => r.id !== row.id))}><Trash2 className="h-4 w-4" /></Button>
+                        </TableCell>
                       </TableRow>
-                    ))}
+                    );
+                    })}
                   </TableBody>
                 </Table>
               </>
