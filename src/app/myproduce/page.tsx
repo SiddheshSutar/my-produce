@@ -1621,23 +1621,49 @@ export default function MyProduceDashboard() {
       return;
     }
     
-    const mockItems: CORow[] = [{
-      id: `MOCK-${Date.now()}-1`,
-      ps: '1',
-    pod: newTripHeader.pod || 'SHA',
-      status: 'PENDING',
-      cutOffDate: format(new Date(), 'yyyy-MM-dd'),
-      etd: format(new Date(), 'yyyy-MM-dd'),
-      taskDate: format(new Date(), 'yyyy-MM-dd'),
-      sku: 'SKU-001',
-      palletization: 'PALLETIZE',
-      containerNo: '',
-      shippingLine: newTripHeader.shippingLine || '',
-      bookingNo: newTripHeader.bookingNo || '',
-      atwStatus: 'PENDING'
-    }];
+    // Fetch all cutting orders for the customer-week-POD combination
+    const matchingCOs: CORow[] = [];
+    
+    if (Array.isArray(contracts)) {
+      contracts.forEach((contract: any) => {
+        // Check if contract matches customer and week
+        if (contract.customerName === newTripHeader.customerName && contract.weekNumber === newTripHeader.weekNumber) {
+          // Get cutting orders for this contract
+          if (Array.isArray(contract.cuttingOrders) && contract.cuttingOrders.length > 0) {
+            contract.cuttingOrders.forEach((co: any, index: number) => {
+              // Filter by POD
+              if (co.pod === newTripHeader.pod) {
+                matchingCOs.push({
+                  id: co.itemId || `CO-${contract.id}-${index}`,
+                  ps: co.ps || String(matchingCOs.length + 1),
+                  pod: co.pod || newTripHeader.pod,
+                  status: co.status || 'PENDING',
+                  cutOffDate: co.cutOffDate || '',
+                  etd: co.etd || '',
+                  taskDate: '',
+                  sku: co.sku || '',
+                  palletization: co.palletization || '',
+                  containerNo: co.containerNo || '',
+                  shippingLine: co.shippingLine || newTripHeader.shippingLine || '',
+                  bookingNo: co.bookingNo || newTripHeader.bookingNo || '',
+                  atwStatus: co.atwStatus || 'PENDING'
+                });
+              }
+            });
+          }
+        }
+      });
+    }
 
-    setBindCoRows(mockItems);
+    // If no matching COs found, show a warning but allow proceeding
+    if (matchingCOs.length === 0) {
+      toast({ 
+        title: "No Cutting Orders Found", 
+        description: `No cutting orders found for ${newTripHeader.customerName} - Week ${newTripHeader.weekNumber} - ${newTripHeader.pod}. You can add rows manually.` 
+      });
+    }
+
+    setBindCoRows(matchingCOs);
     setTripStep(2);
   };
 
@@ -5854,6 +5880,7 @@ export default function MyProduceDashboard() {
       {/* NEW TRIP MODAL */}
       <Dialog open={isNewTripOpen} onOpenChange={(open) => { setIsNewTripOpen(open); if(!open) setTripStep(1); }}>
         <DialogContent className="max-w-[95vw] w-full p-0 overflow-hidden h-[90vh] flex flex-col">
+            <DialogTitle className="text-xl font-bold text-gray-900 tracking-tight">Create Trip</DialogTitle>
           <div className="p-4 border-b bg-gray-50 border-l-4 border-l-green-600 shrink-0"><p className="text-sm font-medium">Please ensure all trip details match the physical manifest.</p></div>
           <div className="flex-1 overflow-y-auto p-8 space-y-8 bg-white">
             <div className="flex items-center justify-center max-w-2xl mx-auto mb-8">
@@ -5995,13 +6022,13 @@ export default function MyProduceDashboard() {
                     {bindCoRows.map((row, index) => (
                       <TableRow key={row.id}>
                         <TableCell className="text-[11px] font-bold text-gray-400">{index + 1}</TableCell>
-                        <TableCell><Input className="h-9 bg-white border shadow-sm font-medium w-20" value={row.ps} onChange={(e) => setBindCoRows(bindCoRows.map(r => r.id === row.id ? { ...r, ps: e.target.value } : r))}/></TableCell>
-                        <TableCell><Input className="h-9 bg-white border shadow-sm font-medium w-24" value={row.pod} readOnly/></TableCell>
-                        <TableCell><Input type="date" className="h-9 bg-white border shadow-sm text-xs" value={row.cutOffDate} onChange={(e) => setBindCoRows(bindCoRows.map(r => r.id === row.id ? { ...r, cutOffDate: e.target.value } : r))}/></TableCell>
-                        <TableCell><Input type="date" className="h-9 bg-white border shadow-sm text-xs" value={row.etd} onChange={(e) => setBindCoRows(bindCoRows.map(r => r.id === row.id ? { ...r, etd: e.target.value } : r))}/></TableCell>
-                        <TableCell><Input type="date" className="h-9 bg-white border shadow-sm text-xs" value={row.taskDate} onChange={(e) => setBindCoRows(bindCoRows.map(r => r.id === row.id ? { ...r, taskDate: e.target.value } : r))}/></TableCell>
-                        <TableCell><Input className="h-9 bg-white border shadow-sm font-medium w-24" value={row.sku} onChange={(e) => setBindCoRows(bindCoRows.map(r => r.id === row.id ? { ...r, sku: e.target.value } : r))}/></TableCell>
-                        <TableCell><Input className="h-9 bg-white border shadow-sm font-medium w-28" value={row.palletization} onChange={(e) => setBindCoRows(bindCoRows.map(r => r.id === row.id ? { ...r, palletization: e.target.value } : r))}/></TableCell>
+                        <TableCell><Input className="h-9 bg-gray-50 border shadow-sm font-medium w-20" value={row.ps} readOnly/></TableCell>
+                        <TableCell><Input className="h-9 bg-gray-50 border shadow-sm font-medium w-24" value={row.pod} readOnly/></TableCell>
+                        <TableCell><Input type="date" className="h-9 bg-gray-50 border shadow-sm text-xs" value={row.cutOffDate} readOnly/></TableCell>
+                        <TableCell><Input type="date" className="h-9 bg-gray-50 border shadow-sm text-xs" value={row.etd} readOnly/></TableCell>
+                        <TableCell><Input type="date" className="h-9 bg-gray-50 border shadow-sm text-xs" value={row.taskDate} readOnly/></TableCell>
+                        <TableCell><Input className="h-9 bg-gray-50 border shadow-sm font-medium w-24" value={row.sku} readOnly/></TableCell>
+                        <TableCell><Input className="h-9 bg-gray-50 border shadow-sm font-medium w-28" value={row.palletization} readOnly/></TableCell>
                         <TableCell>
                           <Select value={row.containerNo} onValueChange={(val) => setBindCoRows(bindCoRows.map(r => r.id === row.id ? { ...r, containerNo: val } : r))}>
                             <SelectTrigger className="h-9 bg-white border shadow-sm font-bold w-40"><SelectValue placeholder="Select Container" /></SelectTrigger>
