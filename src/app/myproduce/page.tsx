@@ -409,6 +409,7 @@ export default function MyProduceDashboard() {
   
   const [activeView, setActiveView] = useState<ViewState>('dashboard');
   const [selectedContractId, setSelectedContractId] = useState<string | null>(null);
+  const [selectedLoadingAdviceKeys, setSelectedLoadingAdviceKeys] = useState<string[]>([]);
   const [isCosModalOpen, setIsCosModalOpen] = useState(false);
   const [weekFilter, setWeekFilter] = useState<string>('all');
   const [customerFilter, setCustomerFilter] = useState<string>('all');
@@ -597,10 +598,10 @@ export default function MyProduceDashboard() {
   });
   const [bookingRows, setBookingRows] = useState<BookingRowItem[]>([createEmptyBookingRow()]);
   const [isFinalizingLoadingAdvice, setIsFinalizingLoadingAdvice] = useState(false);
-  const createEmptyCOSRow = (ps = '1', pod = ''): COSRow => ({
+  const createEmptyCOSRow = (ps = '1', pod = '', shippingLine = ''): COSRow => ({
     id: Math.random().toString(36).substr(2, 9),
     ps,
-    shippingLine: '',
+    shippingLine,
     bookingNumber: '',
     containerNo: '',
     atwStatus: 'PENDING',
@@ -617,6 +618,7 @@ export default function MyProduceDashboard() {
     customerName: '',
     weekNumber: '',
     pod: '',
+    shippingLine: '',
     laId: '',
   });
 
@@ -881,10 +883,11 @@ export default function MyProduceDashboard() {
           }];
 
       contractItems.forEach((item: any, index: number) => {
+        const rowId = `${contract.id}-${index}`;
         rows.push({
-          id: item.itemId || `${contract.id}-${index}`,
+          id: rowId,
           contractId: contract.id,
-          itemId: item.itemId || `${contract.id}-${index}`,
+          itemId: item.itemId || rowId,
           weekNumber: String(contract.weekNumber || '--'),
           customerName: contract.customerName || '--',
           workflowStage: normalizeLoadingAdviceWorkflowStage(contract.workflowStage),
@@ -895,7 +898,11 @@ export default function MyProduceDashboard() {
           cutOffDate: formatDisplayDate(item.cutOffDate || contract.cutOffDate),
           etd: formatDisplayDate(item.etd || contract.etd),
           totalVans: String(item.totalVans ?? contract.totalVans ?? '--'),
-          sku: item.sku || Array.isArray(contract.selectedSKUs) && contract.selectedSKUs.length > 0 ? contract.selectedSKUs[0] : '--',
+          sku: item.sku !== undefined && item.sku !== null && item.sku !== ''
+            ? item.sku
+            : Array.isArray(contract.selectedSKUs) && contract.selectedSKUs.length > 0
+              ? contract.selectedSKUs[0]
+              : contract.sku || '--',
           palletization: item.palletization || contract.palletizedType || '--',
         });
       });
@@ -941,7 +948,11 @@ export default function MyProduceDashboard() {
           pod: item.pod || contract.pod || '--',
           cutOffDate: formatDisplayDate(item.cutOffDate || contract.cutOffDate),
           etd: formatDisplayDate(item.etd || contract.etd),
-          sku: item.sku || contract.sku || '--',
+          sku: item.sku !== undefined && item.sku !== null && item.sku !== ''
+            ? item.sku
+            : Array.isArray(contract.selectedSKUs) && contract.selectedSKUs.length > 0
+              ? contract.selectedSKUs[0]
+              : contract.sku || '--',
           palletization: item.palletization || contract.palletizedType || '--',
         });
       });
@@ -1065,14 +1076,15 @@ export default function MyProduceDashboard() {
   }, [bookingFilter, bookingNumberFilterOptions]);
 
   const bookingShippingLineOptions = useMemo(() => {
-    return Array.from(
-      new Set(
-        (bookings || [])
-          .flatMap((batch: any) => [batch.shippingLine, ...(Array.isArray(batch.items) ? batch.items.map((item: any) => item.shippingLine) : [])])
-          .filter(Boolean)
-      )
-    ) as string[];
-  }, [bookings]);
+    const options = [
+      ...(bookings || [])
+        .flatMap((batch: any) => [batch.shippingLine, ...(Array.isArray(batch.items) ? batch.items.map((item: any) => item.shippingLine) : [])])
+        .filter(Boolean),
+      cosHeader.shippingLine,
+    ];
+
+    return Array.from(new Set(options.filter(Boolean))) as string[];
+  }, [bookings, cosHeader.shippingLine]);
 
   const bookingVesselOptions = useMemo(() => {
     return Array.from(
@@ -1113,6 +1125,13 @@ export default function MyProduceDashboard() {
       return stage === 'READY_FOR_BOOKING' || stage === 'BOOKINGS_CREATED';
     });
   }, [contracts]);
+
+  const selectedLoadingAdviceRows = useMemo(() => {
+    return filteredLoadingAdviceRows.filter((row) => selectedLoadingAdviceKeys.includes(row.id));
+  }, [filteredLoadingAdviceRows, selectedLoadingAdviceKeys]);
+
+  const allFilteredLoadingAdviceSelected = filteredLoadingAdviceRows.length > 0 && selectedLoadingAdviceRows.length === filteredLoadingAdviceRows.length;
+  const someFilteredLoadingAdviceSelected = selectedLoadingAdviceRows.length > 0 && selectedLoadingAdviceRows.length < filteredLoadingAdviceRows.length;
 
   const readyForBookingLoadingAdviceRows = useMemo(() => {
     return (contracts || [])
@@ -1220,13 +1239,23 @@ export default function MyProduceDashboard() {
       return;
     }
 
-    const savedRows = Array.isArray(resolvedContract.cuttingOrders) && resolvedContract.cuttingOrders.length > 0
+    const hasExistingCuttingOrders = Array.isArray(resolvedContract.cuttingOrders) && resolvedContract.cuttingOrders.length > 0;
+    const savedRows = hasExistingCuttingOrders
       ? resolvedContract.cuttingOrders
       : Array.isArray(resolvedContract.items) && resolvedContract.items.length > 0
         ? resolvedContract.items
         : [];
-    const totalRows = Math.max(Number(resolvedContract.totalVans || 0) || savedRows.length || 1, savedRows.length || 1);
-    const sourceRows = Array.from({ length: totalRows }, (_, index) => savedRows[index] || null);
+    const expandedRows = hasExistingCuttingOrders
+      ? savedRows
+      : savedRows.flatMap((item: any) => {
+          const repeatCount = Math.max(Number(item.totalVans || item.qty || 0) || 1, 1);
+          return Array.from({ length: repeatCount }, (_, duplicateIndex) => ({
+            ...item,
+            duplicateIndex,
+          }));
+        });
+    const totalRows = Math.max(expandedRows.length || 1, Number(resolvedContract.totalVans || 0) || 1);
+    const sourceRows = Array.from({ length: totalRows }, (_, index) => expandedRows[index] || null);
     const sourcePod =
       resolvedContract.pod ||
       sourceRows.find((row: any) => row?.pod)?.pod ||
@@ -1235,13 +1264,18 @@ export default function MyProduceDashboard() {
       customerName: resolvedContract.customerName || '',
       weekNumber: String(resolvedContract.weekNumber || ''),
       pod: sourcePod,
+      shippingLine: resolvedContract.shippingLine || '',
       laId: resolvedContract.contractId || resolvedContract.id,
     });
     setCosRows(
       sourceRows.map((row: any, index: number) =>
         row
           ? {
-              id: row.id || row.itemId || Math.random().toString(36).substr(2, 9),
+              id: hasExistingCuttingOrders
+                ? row.id || row.itemId || Math.random().toString(36).substr(2, 9)
+                : (row.itemId || row.id)
+                  ? `${row.itemId || row.id}-${row.duplicateIndex ?? 0}`
+                  : Math.random().toString(36).substr(2, 9),
               ps: String(row.ps || index + 1),
               shippingLine: row.shippingLine || resolvedContract.shippingLine || '',
               bookingNumber: row.bookingNumber || '',
@@ -1250,10 +1284,14 @@ export default function MyProduceDashboard() {
               pod: row.pod || sourcePod || '',
               cutOffDate: row.cutOffDate || resolvedContract.cutOffDate || '',
               etd: row.etd || resolvedContract.etd || '',
-              sku: row.sku || (Array.isArray(resolvedContract.selectedSKUs) ? resolvedContract.selectedSKUs[0] : '') || '',
+              sku: row.sku !== undefined && row.sku !== null && row.sku !== ''
+                ? row.sku
+                : Array.isArray(resolvedContract.selectedSKUs) && resolvedContract.selectedSKUs.length > 0
+                  ? resolvedContract.selectedSKUs[0]
+                  : '',
               palletization: row.palletization || resolvedContract.palletizedType || 'Palletized',
             }
-          : createEmptyCOSRow(String(index + 1), sourcePod)
+          : createEmptyCOSRow(String(index + 1), sourcePod, resolvedContract.shippingLine || '')
       )
     );
     setIsCosModalOpen(true);
@@ -1355,6 +1393,56 @@ export default function MyProduceDashboard() {
         title: 'Loading Advice Finalized',
         description: 'The loading advice is now ready for booking.',
       });
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Finalize Failed', description: err.message });
+    } finally {
+      setIsFinalizingLoadingAdvice(false);
+    }
+  };
+
+  const handleFinalizeSelectedLoadingAdviceForBooking = async () => {
+    if (!db) return;
+    const selectedContractIds = Array.from(new Set(selectedLoadingAdviceRows.map((row) => row.contractId)));
+    if (selectedContractIds.length < 2) {
+      toast({
+        variant: 'destructive',
+        title: 'Select multiple LAs',
+        description: 'Please select two or more loading advice records before marking ready for booking.',
+      });
+      return;
+    }
+
+    const invalidSelection = selectedContractIds.filter((contractId) => {
+      const contract = (contracts || []).find((contract: any) => contract.id === contractId);
+      return !contract || !Array.isArray(contract.cuttingOrders) || contract.cuttingOrders.length === 0;
+    });
+
+    if (invalidSelection.length > 0) {
+      toast({
+        variant: 'destructive',
+        title: 'Cannot finalize selected LAs',
+        description: 'One or more selected LAs do not have cutting orders.',
+      });
+      return;
+    }
+
+    try {
+      setIsFinalizingLoadingAdvice(true);
+      const batch = writeBatch(db);
+      selectedContractIds.forEach((contractId) => {
+        batch.update(doc(db, CONTRACT_PATH, contractId), {
+          workflowStage: 'READY_FOR_BOOKING',
+          status: 'active',
+          cuttingOrdersFinalizedAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      });
+      await batch.commit();
+      toast({
+        title: 'Loading Advice Finalized',
+        description: 'Selected loading advice records are now ready for booking.',
+      });
+      setSelectedLoadingAdviceKeys([]);
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Finalize Failed', description: err.message });
     } finally {
@@ -4051,8 +4139,8 @@ export default function MyProduceDashboard() {
             </Button>
             <Button
               className="h-10 rounded-sm bg-slate-950 px-4 text-[11px] font-bold uppercase tracking-[0.18em] text-white shadow-sm hover:bg-slate-800"
-              onClick={() => handleFinalizeLoadingAdviceForBooking(selectedContract || filteredLoadingAdviceRows[0] || null)}
-              disabled={isFinalizingLoadingAdvice || !selectedContract}
+              onClick={handleFinalizeSelectedLoadingAdviceForBooking}
+              disabled={isFinalizingLoadingAdvice || selectedLoadingAdviceKeys.length < 2}
             >
               {isFinalizingLoadingAdvice ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -4089,6 +4177,18 @@ export default function MyProduceDashboard() {
           <Table>
             <TableHeader className="bg-slate-100/80">
               <TableRow className="hover:bg-transparent">
+                <TableHead className="w-12 px-3 py-3 text-center text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                  <Checkbox
+                    checked={allFilteredLoadingAdviceSelected ? true : someFilteredLoadingAdviceSelected ? 'indeterminate' : false}
+                    onCheckedChange={(checked) => {
+                      if (checked === true) {
+                        setSelectedLoadingAdviceKeys(filteredLoadingAdviceRows.map((row) => row.id));
+                      } else {
+                        setSelectedLoadingAdviceKeys([]);
+                      }
+                    }}
+                  />
+                </TableHead>
                 <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Week No.</TableHead>
                 <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Farm</TableHead>
                 <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Port of Loading</TableHead>
@@ -4105,7 +4205,7 @@ export default function MyProduceDashboard() {
             <TableBody>
               {contractsLoading ? (
                 <TableRow>
-                  <TableCell colSpan={11} className="h-56 text-center">
+                  <TableCell colSpan={12} className="h-56 text-center">
                     <Loader2 className="mx-auto h-8 w-8 animate-spin text-emerald-700/50" />
                   </TableCell>
                 </TableRow>
@@ -4119,6 +4219,19 @@ export default function MyProduceDashboard() {
                       selectedContractId === row.contractId && 'bg-emerald-50/70 ring-1 ring-inset ring-emerald-200'
                     )}
                   >
+                    <TableCell className="px-3 py-3 text-center">
+                      <Checkbox
+                        checked={selectedLoadingAdviceKeys.includes(row.id)}
+                        onCheckedChange={(checked) => {
+                          setSelectedLoadingAdviceKeys((current) =>
+                            checked === true
+                              ? [...new Set([...current, row.id])]
+                              : current.filter((id) => id !== row.id)
+                          );
+                        }}
+                        onClick={(event) => event.stopPropagation()}
+                      />
+                    </TableCell>
                     <TableCell className="px-3 py-3 font-semibold text-slate-900">{row.weekNumber}</TableCell>
                     <TableCell className="px-3 py-3 text-sm font-medium text-slate-700">{row.farm}</TableCell>
                     <TableCell className="px-3 py-3 text-sm text-slate-700">{row.pol}</TableCell>
@@ -4144,7 +4257,7 @@ export default function MyProduceDashboard() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={11} className="h-56 text-center text-sm text-slate-500">
+                  <TableCell colSpan={12} className="h-56 text-center text-sm text-slate-500">
                     No loading advice manifests match the current filters.
                   </TableCell>
                 </TableRow>
@@ -5089,7 +5202,7 @@ export default function MyProduceDashboard() {
                   onClick={() =>
                     setCosRows((rows) => [
                       ...rows,
-                      createEmptyCOSRow(String(rows.length + 1), cosHeader.pod || ''),
+                      createEmptyCOSRow(String(rows.length + 1), cosHeader.pod || '', cosHeader.shippingLine || ''),
                     ])
                   }
                 >
