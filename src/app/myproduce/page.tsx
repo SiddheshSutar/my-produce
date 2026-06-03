@@ -50,7 +50,7 @@ import {
   FileCheck,
   FileSignature,
   Copy,
-  CheckSquare
+  CheckSquare,
 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -128,6 +128,7 @@ type ViewState = 'dashboard' | 'configuration' | 'customer-mapping' | 'material-
 type CuttingOrderStatus = 'EMPTY' | 'PENDING' | 'ONGOING' | 'DEPART';
 type LoadingAdviceWorkflowStage = 'LA_CREATED' | 'COS_CREATED' | 'READY_FOR_BOOKING' | 'BOOKINGS_CREATED';
 type PplaBookingModalTab = 'add-new' | 'bind-existing';
+type PplaContainerModalTab = 'add-new' | 'bind-existing';
 
 const CUTTING_ORDER_STATUS_OPTIONS: CuttingOrderStatus[] = ['EMPTY', 'PENDING', 'ONGOING', 'DEPART'];
 
@@ -175,6 +176,13 @@ const getCuttingOrderStatusClassName = (status: CuttingOrderStatus) => {
 const getNextCuttingOrderStatus = (status: CuttingOrderStatus): CuttingOrderStatus => {
   const currentIndex = CUTTING_ORDER_STATUS_OPTIONS.indexOf(normalizeCuttingOrderStatus(status));
   return CUTTING_ORDER_STATUS_OPTIONS[(currentIndex + 1) % CUTTING_ORDER_STATUS_OPTIONS.length];
+};
+
+const mapContainerAtwStatusToCuttingOrderAtwStatus = (value: any) => {
+  const normalized = String(value || '').toUpperCase();
+  if (normalized === 'Y' || normalized === 'YES' || normalized === 'AVAILABLE' || normalized === 'LOADED') return 'AVAILABLE';
+  if (normalized === 'READY') return 'READY';
+  return 'PENDING';
 };
 
 const normalizeLoadingAdviceWorkflowStage = (value: any): LoadingAdviceWorkflowStage => {
@@ -479,6 +487,20 @@ export default function MyProduceDashboard() {
     containersConfirmed: 0,
   });
   const [selectedPplaExistingBookingKeys, setSelectedPplaExistingBookingKeys] = useState<string[]>([]);
+  const [isPplaContainerModalOpen, setIsPplaContainerModalOpen] = useState(false);
+  const [selectedPplaAllocationRowForContainer, setSelectedPplaAllocationRowForContainer] = useState<CuttingOrderListRow | null>(null);
+  const [pplaContainerModalTab, setPplaContainerModalTab] = useState<PplaContainerModalTab>('add-new');
+  const [selectedPplaExistingContainerKey, setSelectedPplaExistingContainerKey] = useState<string>('');
+  const [pplaNewContainerDraft, setPplaNewContainerDraft] = useState({
+    containerNo: '',
+    vanNo: '',
+    sealNo: '',
+    atwStatus: 'Y' as 'Y' | 'N',
+    atwReleased: format(new Date(), 'yyyy-MM-dd'),
+    pmNo: '',
+    driverName: '',
+    dateWithdrawn: format(new Date(), 'yyyy-MM-dd'),
+  });
   const [selectedShippingDocType, setSelectedShippingDocType] = useState<ShippingDocType>('Shipping Instruction');
   const [selectedShippingDocUploadType, setSelectedShippingDocUploadType] = useState<string>('');
   const [selectedShippingDocFile, setSelectedShippingDocFile] = useState<File | null>(null);
@@ -1114,6 +1136,42 @@ export default function MyProduceDashboard() {
     if (!selectedPplaLARowForBookings) return [];
     return bookingListRows.filter((row) => row.laId !== selectedPplaLARowForBookings.contractId);
   }, [bookingListRows, selectedPplaLARowForBookings]);
+
+  const pplaContainerRegistryRows = useMemo(() => {
+    return (trips || [])
+      .filter((trip: any) => Boolean(trip?.containerNo))
+      .map((trip: any) => ({
+        id: trip.id,
+        containerNo: String(trip.containerNo || ''),
+        vanNo: String(trip.vanNo || ''),
+        sealNo: String(trip.sealNo || ''),
+        atwStatus: String(trip.atwStatus || 'Y'),
+        atwReleased: String(trip.dateAtwReleased || ''),
+        pmNo: String(trip.pmNo || ''),
+        driverName: String(trip.driver || ''),
+        dateWithdrawn: String(trip.dateWithdrawn || ''),
+      }));
+  }, [trips]);
+
+  const pplaCurrentBoundContainer = useMemo(() => {
+    if (!selectedPplaAllocationRowForContainer) return null;
+    const match = pplaContainerRegistryRows.find((row) => row.containerNo === selectedPplaAllocationRowForContainer.containerNo);
+    if (match) return match;
+    if (selectedPplaAllocationRowForContainer.containerNo && selectedPplaAllocationRowForContainer.containerNo !== '--') {
+      return {
+        id: `manual-${selectedPplaAllocationRowForContainer.id}`,
+        containerNo: selectedPplaAllocationRowForContainer.containerNo,
+        vanNo: '--',
+        sealNo: '--',
+        atwStatus: '--',
+        atwReleased: '--',
+        pmNo: '--',
+        driverName: '--',
+        dateWithdrawn: '--',
+      };
+    }
+    return null;
+  }, [pplaContainerRegistryRows, selectedPplaAllocationRowForContainer]);
 
   useEffect(() => {
     if (bookingFilter !== 'all' && !bookingNumberFilterOptions.includes(bookingFilter)) {
@@ -1903,6 +1961,94 @@ export default function MyProduceDashboard() {
     }
   };
 
+  const openPplaContainerModal = (row: CuttingOrderListRow) => {
+    setSelectedPplaAllocationRowForContainer(row);
+    setPplaContainerModalTab('bind-existing');
+    const matched = pplaContainerRegistryRows.find((item) => item.containerNo === row.containerNo);
+    setSelectedPplaExistingContainerKey(matched?.id || '');
+    setPplaNewContainerDraft({
+      containerNo: row.containerNo && row.containerNo !== '--' ? row.containerNo : '',
+      vanNo: '',
+      sealNo: '',
+      atwStatus: 'Y',
+      atwReleased: format(new Date(), 'yyyy-MM-dd'),
+      pmNo: '',
+      driverName: '',
+      dateWithdrawn: format(new Date(), 'yyyy-MM-dd'),
+    });
+    setIsPplaContainerModalOpen(true);
+  };
+
+  const handleCreateAndBindPplaContainer = async () => {
+    if (!db || !selectedPplaAllocationRowForContainer) return;
+    if (!pplaNewContainerDraft.containerNo) {
+      toast({ variant: 'destructive', title: 'Validation Error', description: 'Container No is required.' });
+      return;
+    }
+
+    try {
+      const tripId = `TRIP-${Date.now()}`;
+      await setDoc(doc(db, TRIP_PATH, tripId), {
+        tripId,
+        containerNo: pplaNewContainerDraft.containerNo,
+        vanNo: pplaNewContainerDraft.vanNo,
+        sealNo: pplaNewContainerDraft.sealNo,
+        atwStatus: pplaNewContainerDraft.atwStatus,
+        dateAtwReleased: pplaNewContainerDraft.atwReleased,
+        pmNo: pplaNewContainerDraft.pmNo,
+        driver: pplaNewContainerDraft.driverName,
+        dateWithdrawn: pplaNewContainerDraft.dateWithdrawn,
+        customerName: selectedPplaAllocationRowForContainer.customerName || '',
+        weekNumber: selectedPplaAllocationRowForContainer.weekNumber || '',
+        pod: selectedPplaAllocationRowForContainer.pod || '',
+        shippingLine: selectedPplaAllocationRowForContainer.shippingLine || '',
+        status: 'ACTIVE',
+        workflowStage: 'TRIP_CREATED',
+        cuttingOrders: [],
+        cuttingOrderTotal: 0,
+        updatedAt: serverTimestamp(),
+      });
+
+      await handleInlineCuttingOrderRowUpdate(selectedPplaAllocationRowForContainer, {
+        containerNo: pplaNewContainerDraft.containerNo,
+        atwStatus: mapContainerAtwStatusToCuttingOrderAtwStatus(pplaNewContainerDraft.atwStatus),
+      });
+
+      toast({ title: 'Container Bound', description: 'New container was added and bound to the selected CO.' });
+      setIsPplaContainerModalOpen(false);
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Bind Failed', description: err.message });
+    }
+  };
+
+  const handleBindExistingPplaContainer = async () => {
+    if (!selectedPplaAllocationRowForContainer) return;
+    const selectedContainer = pplaContainerRegistryRows.find((row) => row.id === selectedPplaExistingContainerKey);
+    if (!selectedContainer) {
+      toast({ variant: 'destructive', title: 'No Selection', description: 'Select one container to bind.' });
+      return;
+    }
+
+    await handleInlineCuttingOrderRowUpdate(selectedPplaAllocationRowForContainer, {
+      containerNo: selectedContainer.containerNo,
+      atwStatus: mapContainerAtwStatusToCuttingOrderAtwStatus(selectedContainer.atwStatus),
+    });
+
+    toast({ title: 'Container Bound', description: 'Selected container was bound to the CO row.' });
+    setIsPplaContainerModalOpen(false);
+  };
+
+  const handleDetachPplaContainer = async () => {
+    if (!selectedPplaAllocationRowForContainer) return;
+
+    await handleInlineCuttingOrderRowUpdate(selectedPplaAllocationRowForContainer, {
+      containerNo: '--',
+      atwStatus: 'PENDING',
+    });
+
+    toast({ title: 'Container Detached', description: 'The container was unbound from this CO row.' });
+  };
+
   const handleSaveCOS = async () => {
     if (!db || !selectedContract) return;
     try {
@@ -2252,18 +2398,20 @@ export default function MyProduceDashboard() {
 
   const handleInlineCuttingOrderRowUpdate = async (
     row: CuttingOrderListRow,
-    updates: Partial<Pick<CuttingOrderListRow, 'ps' | 'taskDate' | 'bookingNo' | 'containerNo'>>
+    updates: Partial<Pick<CuttingOrderListRow, 'ps' | 'taskDate' | 'bookingNo' | 'containerNo' | 'atwStatus'>>
   ) => {
     const nextPs = (updates.ps ?? row.ps).trim();
     const nextTaskDate = updates.taskDate ?? row.taskDate ?? '';
     const nextBookingNo = (updates.bookingNo ?? row.bookingNo ?? '').trim();
     const nextContainerNo = (updates.containerNo ?? row.containerNo ?? '').trim();
+    const nextAtwStatus = updates.atwStatus ?? row.atwStatus;
 
     if (
       nextPs === row.ps &&
       nextTaskDate === (row.taskDate || '') &&
       nextBookingNo === (row.bookingNo || '') &&
-      nextContainerNo === (row.containerNo || '')
+      nextContainerNo === (row.containerNo || '') &&
+      nextAtwStatus === row.atwStatus
     ) return;
 
     try {
@@ -2276,12 +2424,25 @@ export default function MyProduceDashboard() {
                 taskDate: nextTaskDate,
                 bookingNo: nextBookingNo,
                 containerNo: nextContainerNo,
+                atwStatus: nextAtwStatus,
               }
             : item
         )
         .filter((item) => item.contractId === row.contractId);
 
       await persistCuttingOrderContractRows(row.contractId, contractRows);
+      setSelectedPplaAllocationRowForContainer((current) => {
+        if (!current) return current;
+        if (current.contractId !== row.contractId || current.id !== row.id) return current;
+        return {
+          ...current,
+          ps: nextPs || current.ps,
+          taskDate: nextTaskDate,
+          bookingNo: nextBookingNo,
+          containerNo: nextContainerNo,
+          atwStatus: nextAtwStatus,
+        };
+      });
       toast({
         title: 'Row Updated',
         description: 'Row changes were saved.',
@@ -3274,7 +3435,7 @@ export default function MyProduceDashboard() {
                         ? 'border-red-200 bg-red-50 text-red-600'
                         : row.atwStatus === 'READY'
                           ? 'border-amber-200 bg-amber-50 text-amber-600'
-                          : row.atwStatus === 'LOADED'
+                          : row.atwStatus === 'LOADED' || row.atwStatus === 'AVAILABLE'
                             ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                             : 'border-slate-200 bg-slate-50 text-slate-600'
                     )}
@@ -4401,19 +4562,13 @@ export default function MyProduceDashboard() {
                 value="bookings"
                 className="rounded-none border-b-2 border-transparent px-0 py-3 font-bold uppercase text-xs tracking-widest text-gray-500 data-[state=active]:border-anflocor-green data-[state=active]:text-gray-900 data-[state=active]:bg-transparent"
               >
-                Bookings
+                Assign PS
               </TabsTrigger>
               <TabsTrigger 
                 value="allocations"
                 className="rounded-none border-b-2 border-transparent px-0 py-3 font-bold uppercase text-xs tracking-widest text-gray-500 data-[state=active]:border-anflocor-green data-[state=active]:text-gray-900 data-[state=active]:bg-transparent"
               >
-                Allocations
-              </TabsTrigger>
-              <TabsTrigger 
-                value="withdrawals"
-                className="rounded-none border-b-2 border-transparent px-0 py-3 font-bold uppercase text-xs tracking-widest text-gray-500 data-[state=active]:border-anflocor-green data-[state=active]:text-gray-900 data-[state=active]:bg-transparent"
-              >
-                Withdrawals
+                Booking & Container Binding
               </TabsTrigger>
             </TabsList>
           </div>
@@ -4615,7 +4770,7 @@ export default function MyProduceDashboard() {
                               ? 'border-red-200 bg-red-50 text-red-600'
                               : row.atwStatus === 'READY'
                                 ? 'border-amber-200 bg-amber-50 text-amber-600'
-                                : row.atwStatus === 'LOADED'
+                                : row.atwStatus === 'LOADED' || row.atwStatus === 'AVAILABLE'
                                   ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                                   : 'border-slate-200 bg-slate-50 text-slate-600'
                           )}
@@ -4736,7 +4891,6 @@ export default function MyProduceDashboard() {
                     <TableHead className="text-[9px] font-black uppercase text-gray-400">Task Date</TableHead>
                     <TableHead className="text-[9px] font-black uppercase text-gray-400">SKU</TableHead>
                     <TableHead className="text-[9px] font-black uppercase text-gray-400">Palletization</TableHead>
-                    <TableHead className="text-[9px] font-black uppercase text-gray-400">Status</TableHead>
                     <TableHead className="text-[9px] font-black uppercase text-right text-gray-400">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -4758,28 +4912,35 @@ export default function MyProduceDashboard() {
                       <TableCell className="font-bold text-xs">{row.ps}</TableCell>
                       <TableCell className="text-xs font-bold uppercase">{row.shippingLine}</TableCell>
                       <TableCell className="text-xs text-gray-500 font-semibold">
-                        <Input
-                          defaultValue={row.bookingNo === '--' ? '' : row.bookingNo}
-                          list="ppla-alloc-booking-options"
-                          placeholder="Select booking no"
-                          className="h-8 min-w-[170px]"
-                          onClick={(event) => event.stopPropagation()}
-                          onBlur={(event) => {
-                            handleInlineCuttingOrderRowUpdate(row, { bookingNo: event.target.value || '--' });
+                        <Select
+                          value={row.bookingNo && row.bookingNo !== '--' ? row.bookingNo : '__none'}
+                          onValueChange={(value) => {
+                            handleInlineCuttingOrderRowUpdate(row, { bookingNo: value === '__none' ? '--' : value });
                           }}
-                        />
+                        >
+                          <SelectTrigger className="h-8 min-w-[170px]" onClick={(event) => event.stopPropagation()}>
+                            <SelectValue placeholder="Select booking no" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none">Unassigned</SelectItem>
+                            {bookingNumberOptions.map((bookingNo) => (
+                              <SelectItem key={bookingNo} value={bookingNo}>{bookingNo}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </TableCell>
                       <TableCell className="font-bold text-xs">
-                        <Input
-                          defaultValue={row.containerNo === '--' ? '' : row.containerNo}
-                          list="ppla-alloc-container-options"
-                          placeholder="Select container no"
-                          className="h-8 min-w-[170px]"
-                          onClick={(event) => event.stopPropagation()}
-                          onBlur={(event) => {
-                            handleInlineCuttingOrderRowUpdate(row, { containerNo: event.target.value || '--' });
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-8 min-w-[170px] justify-start px-3 text-xs font-medium"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openPplaContainerModal(row);
                           }}
-                        />
+                        >
+                          {row.containerNo && row.containerNo !== '--' ? row.containerNo : 'Bind Container'}
+                        </Button>
                       </TableCell>
                       <TableCell className="text-center">
                         <Badge
@@ -4790,7 +4951,7 @@ export default function MyProduceDashboard() {
                               ? 'border-red-200 bg-red-50 text-red-600'
                               : row.atwStatus === 'READY'
                                 ? 'border-amber-200 bg-amber-50 text-amber-600'
-                                : row.atwStatus === 'LOADED'
+                                : row.atwStatus === 'LOADED' || row.atwStatus === 'AVAILABLE'
                                   ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                                   : 'border-slate-200 bg-slate-50 text-slate-600'
                           )}
@@ -4804,7 +4965,7 @@ export default function MyProduceDashboard() {
                       <TableCell className="text-xs text-gray-500">{row.taskDate || '--'}</TableCell>
                       <TableCell className="text-xs font-bold">{row.sku}</TableCell>
                       <TableCell className="text-xs">{row.palletization}</TableCell>
-                      <TableCell className="text-center">
+                      {/* <TableCell className="text-center">
                         <Select
                           value={normalizeCuttingOrderStatus(row.status)}
                           onValueChange={(value) => handleUpdateCuttingOrderStatus(row, value as CuttingOrderStatus)}
@@ -4824,7 +4985,7 @@ export default function MyProduceDashboard() {
                             <SelectItem value="DEPART">Depart</SelectItem>
                           </SelectContent>
                         </Select>
-                      </TableCell>
+                      </TableCell> */}
                       <TableCell className="text-right">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -4838,6 +4999,12 @@ export default function MyProduceDashboard() {
                               onClick={() => openEditCuttingOrderModal(row)}
                             >
                               <FileText className="h-4 w-4 text-gray-500" /> Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="gap-3 py-2.5 cursor-pointer font-medium"
+                              onClick={() => openEditCuttingOrderModal(row)}
+                            >
+                              <Check className="h-4 w-4 text-gray-500" /> Enroute PS
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -4853,9 +5020,6 @@ export default function MyProduceDashboard() {
                 </TableBody>
               </Table>
             </div>
-          </TabsContent>
-          <TabsContent value="withdrawals" className="p-6 m-0">
-            {/* Content will be added later */}
           </TabsContent>
         </Tabs>
       </div>
@@ -5056,6 +5220,190 @@ export default function MyProduceDashboard() {
                 Final Submit
               </Button>
             </div> */}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isPplaContainerModalOpen}
+        onOpenChange={(open) => {
+          setIsPplaContainerModalOpen(open);
+          if (!open) {
+            setSelectedPplaAllocationRowForContainer(null);
+            setPplaContainerModalTab('add-new');
+            setSelectedPplaExistingContainerKey('');
+            setPplaNewContainerDraft({
+              containerNo: '',
+              vanNo: '',
+              sealNo: '',
+              atwStatus: 'Y',
+              atwReleased: format(new Date(), 'yyyy-MM-dd'),
+              pmNo: '',
+              driverName: '',
+              dateWithdrawn: format(new Date(), 'yyyy-MM-dd'),
+            });
+          }
+        }}
+      >
+        <DialogContent className="max-w-5xl p-0 overflow-hidden bg-white border-none shadow-2xl">
+          <div className="p-6 border-b flex justify-between items-center">
+            <DialogTitle className="text-xl font-bold text-gray-900 tracking-tight">Bind Container</DialogTitle>
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400" onClick={() => setIsPplaContainerModalOpen(false)}>
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
+          <div className="px-6 pt-4 text-xs text-slate-500">
+            CO: <span className="font-semibold text-slate-800">{selectedPplaAllocationRowForContainer?.id || '--'}</span>
+          </div>
+          <div className="p-6">
+            <Table>
+              <TableHeader className="bg-gray-50/60">
+                <TableRow>
+                  <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Container No.</TableHead>
+                  <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Van No.</TableHead>
+                  <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Seal No.</TableHead>
+                  <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">ATW Status</TableHead>
+                  <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">ATW Released</TableHead>
+                  <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">PM No.</TableHead>
+                  <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Driver</TableHead>
+                  <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Date Withdrawn</TableHead>
+                  <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-right text-slate-500">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pplaCurrentBoundContainer ? (
+                  <TableRow>
+                    <TableCell className="text-sm font-semibold text-slate-900">{pplaCurrentBoundContainer.containerNo}</TableCell>
+                    <TableCell className="text-sm text-slate-700">{pplaCurrentBoundContainer.vanNo || '--'}</TableCell>
+                    <TableCell className="text-sm text-slate-700">{pplaCurrentBoundContainer.sealNo || '--'}</TableCell>
+                    <TableCell className="text-sm text-slate-700">{pplaCurrentBoundContainer.atwStatus || '--'}</TableCell>
+                    <TableCell className="text-sm text-slate-700">{pplaCurrentBoundContainer.atwReleased || '--'}</TableCell>
+                    <TableCell className="text-sm text-slate-700">{pplaCurrentBoundContainer.pmNo || '--'}</TableCell>
+                    <TableCell className="text-sm text-slate-700">{pplaCurrentBoundContainer.driverName || '--'}</TableCell>
+                    <TableCell className="text-sm text-slate-700">{pplaCurrentBoundContainer.dateWithdrawn || '--'}</TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="outline"
+                        className="h-8 px-3 text-[10px] font-bold uppercase tracking-[0.14em]"
+                        onClick={handleDetachPplaContainer}
+                      >
+                        Detach
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={9} className="h-28 text-center text-sm text-slate-500">
+                      No container is currently bound to this CO.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+
+            <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50/60">
+              <Tabs value={pplaContainerModalTab} onValueChange={(value) => setPplaContainerModalTab(value as PplaContainerModalTab)}>
+                <div className="border-b border-slate-200 px-4 pt-4">
+                  <TabsList className="bg-transparent p-0 h-auto gap-6">
+                    <TabsTrigger value="add-new" className="rounded-none border-b-2 border-transparent px-0 py-2 text-xs font-bold uppercase tracking-[0.16em] data-[state=active]:border-anflocor-green data-[state=active]:bg-transparent">Add Container</TabsTrigger>
+                    <TabsTrigger value="bind-existing" className="rounded-none border-b-2 border-transparent px-0 py-2 text-xs font-bold uppercase tracking-[0.16em] data-[state=active]:border-anflocor-green data-[state=active]:bg-transparent">Bind Existing Containers</TabsTrigger>
+                  </TabsList>
+                </div>
+
+                <TabsContent value="add-new" className="m-0 p-4 space-y-4">
+                  <div className="rounded-md border bg-white p-4">
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase text-slate-500">Container No</Label>
+                        <Input value={pplaNewContainerDraft.containerNo} onChange={(e) => setPplaNewContainerDraft((current) => ({ ...current, containerNo: e.target.value }))} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase text-slate-500">Van No</Label>
+                        <Input value={pplaNewContainerDraft.vanNo} onChange={(e) => setPplaNewContainerDraft((current) => ({ ...current, vanNo: e.target.value }))} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase text-slate-500">Seal No</Label>
+                        <Input value={pplaNewContainerDraft.sealNo} onChange={(e) => setPplaNewContainerDraft((current) => ({ ...current, sealNo: e.target.value }))} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase text-slate-500">ATW Status</Label>
+                        <Select value={pplaNewContainerDraft.atwStatus} onValueChange={(value) => setPplaNewContainerDraft((current) => ({ ...current, atwStatus: value as 'Y' | 'N' }))}>
+                          <SelectTrigger className="h-10"><SelectValue placeholder="ATW Status" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Y">Y</SelectItem>
+                            <SelectItem value="N">N</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase text-slate-500">ATW Released</Label>
+                        <Input type="date" value={pplaNewContainerDraft.atwReleased} onChange={(e) => setPplaNewContainerDraft((current) => ({ ...current, atwReleased: e.target.value }))} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase text-slate-500">PM No</Label>
+                        <Input value={pplaNewContainerDraft.pmNo} onChange={(e) => setPplaNewContainerDraft((current) => ({ ...current, pmNo: e.target.value }))} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase text-slate-500">Driver</Label>
+                        <Input value={pplaNewContainerDraft.driverName} onChange={(e) => setPplaNewContainerDraft((current) => ({ ...current, driverName: e.target.value }))} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase text-slate-500">Date Withdrawn</Label>
+                        <Input type="date" value={pplaNewContainerDraft.dateWithdrawn} onChange={(e) => setPplaNewContainerDraft((current) => ({ ...current, dateWithdrawn: e.target.value }))} />
+                      </div>
+                    </div>
+                    <div className="mt-4 flex justify-end">
+                      <Button className="bg-anflocor-green text-white hover:bg-anflocor-green/90" onClick={handleCreateAndBindPplaContainer}>Add & Bind</Button>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="bind-existing" className="m-0 p-4 space-y-3">
+                  <div className="flex justify-end">
+                    <Button className="bg-anflocor-green text-white hover:bg-anflocor-green/90" onClick={handleBindExistingPplaContainer}>Save</Button>
+                  </div>
+                  <div className="rounded-md border bg-white overflow-hidden">
+                    <Table>
+                      <TableHeader className="bg-slate-100/80">
+                        <TableRow>
+                          <TableHead className="w-12 text-center text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500"> </TableHead>
+                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Container No</TableHead>
+                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Van No</TableHead>
+                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Seal No</TableHead>
+                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Driver</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {pplaContainerRegistryRows.length > 0 ? (
+                          pplaContainerRegistryRows.map((container) => (
+                            <TableRow key={container.id}>
+                              <TableCell className="text-center">
+                                <Checkbox
+                                  checked={selectedPplaExistingContainerKey === container.id}
+                                  onCheckedChange={(checked) => {
+                                    setSelectedPplaExistingContainerKey(checked ? container.id : '');
+                                  }}
+                                />
+                              </TableCell>
+                              <TableCell className="text-sm font-semibold text-slate-900">{container.containerNo}</TableCell>
+                              <TableCell className="text-sm text-slate-700">{container.vanNo || '--'}</TableCell>
+                              <TableCell className="text-sm text-slate-700">{container.sealNo || '--'}</TableCell>
+                              <TableCell className="text-sm text-slate-700">{container.driverName || '--'}</TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <TableRow>
+                            <TableCell colSpan={5} className="h-28 text-center text-sm text-slate-500">
+                              No system containers found.
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -6119,7 +6467,7 @@ export default function MyProduceDashboard() {
                               onValueChange={(v) => setCosRows(cosRows.map((r) => (r.id === row.id ? { ...r, containerNo: v } : r)))}
                             >
                               <SelectTrigger className="h-8 rounded-sm border-slate-300 bg-white shadow-sm text-sm">
-                                <SelectValue placeholder="Select Container No" />
+                                <SelectValue placeholder="Select Container# No" />
                               </SelectTrigger>
                               <SelectContent>
                                 {containerNumberOptions.length > 0 ? (
