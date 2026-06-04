@@ -130,6 +130,8 @@ type LoadingAdviceWorkflowStage = 'LA_CREATED' | 'COS_CREATED' | 'READY_FOR_BOOK
 type PplaBookingModalTab = 'add-new' | 'bind-existing';
 type PplaContainerModalTab = 'add-new' | 'bind-existing';
 
+const PPLA_PAGE_SIZE = 10;
+
 const CUTTING_ORDER_STATUS_OPTIONS: CuttingOrderStatus[] = ['EMPTY', 'PENDING', 'ONGOING', 'DEPART'];
 
 const normalizeCuttingOrderStatus = (value: any): CuttingOrderStatus => {
@@ -478,6 +480,9 @@ export default function MyProduceDashboard() {
   const [pplaSubtab, setPplaSubtab] = useState<string>('loading-advice');
   const [selectedPplaLAForAssignPS, setSelectedPplaLAForAssignPS] = useState<LoadingAdviceListRow | null>(null);
   const [selectedPplaAssignPSRow, setSelectedPplaAssignPSRow] = useState<CuttingOrderListRow | null>(null);
+  const [pplaLoadingAdvicePage, setPplaLoadingAdvicePage] = useState(1);
+  const [pplaAssignPsPage, setPplaAssignPsPage] = useState(1);
+  const [pplaAllocationsPage, setPplaAllocationsPage] = useState(1);
   const [selectedPplaLARowForBookings, setSelectedPplaLARowForBookings] = useState<LoadingAdviceListRow | null>(null);
   const [pplaBookingModalTab, setPplaBookingModalTab] = useState<PplaBookingModalTab>('add-new');
   const [isPplaAddBookingFormOpen, setIsPplaAddBookingFormOpen] = useState(false);
@@ -491,6 +496,7 @@ export default function MyProduceDashboard() {
   });
   const [selectedPplaExistingBookingKeys, setSelectedPplaExistingBookingKeys] = useState<string[]>([]);
   const [isPplaContainerModalOpen, setIsPplaContainerModalOpen] = useState(false);
+  const [isComingSoonModalOpen, setIsComingSoonModalOpen] = useState(false);
   const [selectedPplaAllocationRowForContainer, setSelectedPplaAllocationRowForContainer] = useState<CuttingOrderListRow | null>(null);
   const [pplaContainerModalTab, setPplaContainerModalTab] = useState<PplaContainerModalTab>('add-new');
   const [selectedPplaExistingContainerKey, setSelectedPplaExistingContainerKey] = useState<string>('');
@@ -1020,6 +1026,14 @@ export default function MyProduceDashboard() {
     return cuttingOrderRows.reduce((acc, row: any) => acc + (Number(row.totalVans ?? row.qty ?? 0) || 0), 0);
   }, [cuttingOrderRows]);
 
+  const filteredLoadingAdviceRows = useMemo(() => {
+    return loadingAdviceRows.filter((row) => {
+      const matchesWeek = weekFilter === 'all' || row.weekNumber === weekFilter;
+      const matchesCustomer = customerFilter === 'all' || row.customerName === customerFilter;
+      return matchesWeek && matchesCustomer;
+    });
+  }, [loadingAdviceRows, weekFilter, customerFilter]);
+
   const filteredCuttingOrderRows = useMemo(() => {
     return cuttingOrderRows.filter((row) => {
       const matchesWeek = weekFilter === 'all' || row.weekNumber === weekFilter;
@@ -1027,6 +1041,51 @@ export default function MyProduceDashboard() {
       return matchesWeek && matchesCustomer;
     });
   }, [cuttingOrderRows, weekFilter, customerFilter]);
+
+  const pplaAssignPsRows = useMemo(() => {
+    return selectedPplaLAForAssignPS
+      ? filteredCuttingOrderRows.filter((row) => row.contractId === selectedPplaLAForAssignPS.contractId)
+      : filteredCuttingOrderRows;
+  }, [filteredCuttingOrderRows, selectedPplaLAForAssignPS]);
+
+  const pplaAllocationRows = useMemo(() => {
+    return selectedPplaAssignPSRow
+      ? filteredCuttingOrderRows.filter(
+          (row) => row.contractId === selectedPplaAssignPSRow.contractId && row.id === selectedPplaAssignPSRow.id
+        )
+      : filteredCuttingOrderRows;
+  }, [filteredCuttingOrderRows, selectedPplaAssignPSRow]);
+
+  const pplaLoadingAdviceTotalPages = Math.max(1, Math.ceil(filteredLoadingAdviceRows.length / PPLA_PAGE_SIZE));
+  const pplaAssignPsTotalPages = Math.max(1, Math.ceil(pplaAssignPsRows.length / PPLA_PAGE_SIZE));
+  const pplaAllocationsTotalPages = Math.max(1, Math.ceil(pplaAllocationRows.length / PPLA_PAGE_SIZE));
+
+  const pplaLoadingAdvicePageRows = useMemo(() => {
+    const start = (pplaLoadingAdvicePage - 1) * PPLA_PAGE_SIZE;
+    return filteredLoadingAdviceRows.slice(start, start + PPLA_PAGE_SIZE);
+  }, [filteredLoadingAdviceRows, pplaLoadingAdvicePage]);
+
+  const pplaAssignPsPageRows = useMemo(() => {
+    const start = (pplaAssignPsPage - 1) * PPLA_PAGE_SIZE;
+    return pplaAssignPsRows.slice(start, start + PPLA_PAGE_SIZE);
+  }, [pplaAssignPsRows, pplaAssignPsPage]);
+
+  const pplaAllocationPageRows = useMemo(() => {
+    const start = (pplaAllocationsPage - 1) * PPLA_PAGE_SIZE;
+    return pplaAllocationRows.slice(start, start + PPLA_PAGE_SIZE);
+  }, [pplaAllocationRows, pplaAllocationsPage]);
+
+  useEffect(() => {
+    setPplaLoadingAdvicePage((prev) => Math.min(prev, pplaLoadingAdviceTotalPages));
+  }, [pplaLoadingAdviceTotalPages]);
+
+  useEffect(() => {
+    setPplaAssignPsPage((prev) => Math.min(prev, pplaAssignPsTotalPages));
+  }, [pplaAssignPsTotalPages]);
+
+  useEffect(() => {
+    setPplaAllocationsPage((prev) => Math.min(prev, pplaAllocationsTotalPages));
+  }, [pplaAllocationsTotalPages]);
 
   const cuttingOrderRowKey = (row: CuttingOrderListRow) => `${row.contractId}:${row.id}`;
 
@@ -1100,6 +1159,24 @@ export default function MyProduceDashboard() {
     return Array.from(uniqueNumbers).sort((a, b) => a.localeCompare(b));
   }, [bookingListRows]);
 
+  const laLBoundBookingNumbers = useMemo(() => {
+    if (!selectedPplaAssignPSRow) return [];
+    // Filter bookings that belong to the same LA contract as the selected CO
+    // LA rows have laId format: ${contractId}-${index}, so check if laId starts with contractId
+    const uniqueNumbers = new Set<string>();
+    bookingListRows.forEach((row) => {
+      if (
+        row.bookingNumber &&
+        row.bookingNumber !== '--' &&
+        row.laId &&
+        row.laId.startsWith(selectedPplaAssignPSRow.contractId)
+      ) {
+        uniqueNumbers.add(row.bookingNumber);
+      }
+    });
+    return Array.from(uniqueNumbers).sort((a, b) => a.localeCompare(b));
+  }, [bookingListRows, selectedPplaAssignPSRow]);
+
   const filteredBookingRows = useMemo(() => {
     return bookingListRows.filter((row) => {
       const matchesWeek = weekFilter === 'all' || row.weekNumber === weekFilter;
@@ -1130,14 +1207,14 @@ export default function MyProduceDashboard() {
 
   const pplaAssociatedBookings = useMemo(() => {
     if (!selectedPplaLARowForBookings) return [];
-    return bookingListRows.filter((row) => row.laId === selectedPplaLARowForBookings.contractId);
+    return bookingListRows.filter((row) => row.laId === selectedPplaLARowForBookings.id);
   }, [bookingListRows, selectedPplaLARowForBookings]);
 
   const pplaExistingBookingKey = (row: BookingListRow) => `${row.batchId}:${row.id}`;
 
   const pplaExistingBookingsToBind = useMemo(() => {
     if (!selectedPplaLARowForBookings) return [];
-    return bookingListRows.filter((row) => row.laId !== selectedPplaLARowForBookings.contractId);
+    return bookingListRows.filter((row) => row.laId !== selectedPplaLARowForBookings.id);
   }, [bookingListRows, selectedPplaLARowForBookings]);
 
   const pplaContainerRegistryRows = useMemo(() => {
@@ -1217,14 +1294,6 @@ export default function MyProduceDashboard() {
       )
     ) as string[];
   }, [trips]);
-
-  const filteredLoadingAdviceRows = useMemo(() => {
-    return loadingAdviceRows.filter((row) => {
-      const matchesWeek = weekFilter === 'all' || row.weekNumber === weekFilter;
-      const matchesCustomer = customerFilter === 'all' || row.customerName === customerFilter;
-      return matchesWeek && matchesCustomer;
-    });
-  }, [loadingAdviceRows, weekFilter, customerFilter]);
 
   const readyLoadingAdviceOptions = useMemo(() => {
     return (contracts || []).filter((contract: any) => {
@@ -1779,7 +1848,7 @@ export default function MyProduceDashboard() {
       const batchId = `BOOK-${Date.now()}`;
       const bookingItem = {
         bookingId: `${batchId}-1`,
-        laId: selectedPplaLARowForBookings.contractId,
+        laId: selectedPplaLARowForBookings.id,
         bookingNumber: pplaNewBookingDraft.bookingNumber,
         shippingLine: pplaNewBookingDraft.shippingLine,
         vesselName: pplaNewBookingDraft.vesselName,
@@ -1790,7 +1859,7 @@ export default function MyProduceDashboard() {
 
       await setDoc(doc(db, BOOKING_PATH, batchId), {
         batchId,
-        laId: selectedPplaLARowForBookings.contractId,
+        laId: selectedPplaLARowForBookings.id,
         customerName: selectedPplaLARowForBookings.customerName,
         weekNumber: selectedPplaLARowForBookings.weekNumber,
         workflowStage: 'BOOKINGS_CREATED',
@@ -1845,10 +1914,12 @@ export default function MyProduceDashboard() {
           const existingItems = Array.isArray(sourceBatch?.items) ? sourceBatch.items : [];
           const nextItems = existingItems.map((item: any) => ({
             ...item,
-            laId: selectedPplaLARowForBookings.contractId,
+            laId: selectedPplaLARowForBookings.id,
           }));
           const payload: any = {
-            laId: selectedPplaLARowForBookings.contractId,
+            laId: selectedPplaLARowForBookings.id,
+            customerName: selectedPplaLARowForBookings.customerName,
+            weekNumber: selectedPplaLARowForBookings.weekNumber,
             updatedAt: serverTimestamp(),
           };
           if (nextItems.length > 0) {
@@ -1902,10 +1973,12 @@ export default function MyProduceDashboard() {
         const existingItems = Array.isArray(sourceBatch?.items) ? sourceBatch.items : [];
         const nextItems = existingItems.map((item: any) => ({
           ...item,
-          laId: selectedPplaLARowForBookings.contractId,
+          laId: selectedPplaLARowForBookings.id,
         }));
         const payload: any = {
-          laId: selectedPplaLARowForBookings.contractId,
+          laId: selectedPplaLARowForBookings.id,
+          customerName: selectedPplaLARowForBookings.customerName,
+          weekNumber: selectedPplaLARowForBookings.weekNumber,
           updatedAt: serverTimestamp(),
         };
         if (nextItems.length > 0) {
@@ -1966,7 +2039,7 @@ export default function MyProduceDashboard() {
 
   const openPplaContainerModal = (row: CuttingOrderListRow) => {
     setSelectedPplaAllocationRowForContainer(row);
-    setPplaContainerModalTab('bind-existing');
+    setPplaContainerModalTab('add-new');
     const matched = pplaContainerRegistryRows.find((item) => item.containerNo === row.containerNo);
     setSelectedPplaExistingContainerKey(matched?.id || '');
     setPplaNewContainerDraft({
@@ -4628,12 +4701,13 @@ export default function MyProduceDashboard() {
                         <Loader2 className="mx-auto h-8 w-8 animate-spin text-emerald-700/50" />
                       </TableCell>
                     </TableRow>
-                  ) : filteredLoadingAdviceRows.length > 0 ? (
-                    filteredLoadingAdviceRows.map((row) => (
+                  ) : pplaLoadingAdvicePageRows.length > 0 ? (
+                    pplaLoadingAdvicePageRows.map((row) => (
                       <TableRow
                         key={row.id}
                         onClick={() => {
                           setSelectedPplaLAForAssignPS(row);
+                          setPplaAssignPsPage(1);
                           setPplaSubtab('bookings');
                         }}
                         className={cn(
@@ -4662,7 +4736,7 @@ export default function MyProduceDashboard() {
                         <TableCell className="px-3 py-3 text-sm text-slate-700">{row.cutOffDate}</TableCell>
                         <TableCell className="px-3 py-3 text-sm text-slate-700">{row.etd}</TableCell>
                         <TableCell className="px-3 py-3 text-sm font-semibold text-slate-900">{row.totalVans}</TableCell>
-                        <TableCell className="px-3 py-3 text-sm font-semibold text-slate-900">{bookedVansByContractId[row.contractId] || 0}</TableCell>
+                        <TableCell className="px-3 py-3 text-sm font-semibold text-slate-900">{bookedVansByContractId[row.id] || 0}</TableCell>
                         <TableCell className="px-3 py-3 text-sm text-slate-700">{row.sku}</TableCell>
                         <TableCell className="px-3 py-3 text-sm text-slate-700">{row.palletization}</TableCell>
                         <TableCell className="px-3 py-3 text-right" onClick={(event) => event.stopPropagation()}>
@@ -4696,6 +4770,34 @@ export default function MyProduceDashboard() {
                   )}
                 </TableBody>
               </Table>
+              <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-xs text-slate-600">
+                <span>
+                  Showing {pplaLoadingAdvicePageRows.length} of {filteredLoadingAdviceRows.length} rows
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-3"
+                    disabled={pplaLoadingAdvicePage <= 1}
+                    onClick={() => setPplaLoadingAdvicePage((prev) => Math.max(1, prev - 1))}
+                  >
+                    Previous
+                  </Button>
+                  <span className="min-w-[80px] text-center font-semibold text-slate-700">
+                    {pplaLoadingAdvicePage} / {pplaLoadingAdviceTotalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-3"
+                    disabled={pplaLoadingAdvicePage >= pplaLoadingAdviceTotalPages}
+                    onClick={() => setPplaLoadingAdvicePage((prev) => Math.min(pplaLoadingAdviceTotalPages, prev + 1))}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
             </Card>
           </TabsContent>
           <TabsContent value="bookings" className="p-6 m-0">
@@ -4758,13 +4860,7 @@ export default function MyProduceDashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(selectedPplaLAForAssignPS
-                    ? filteredCuttingOrderRows.filter((r) => r.contractId === selectedPplaLAForAssignPS.contractId)
-                    : filteredCuttingOrderRows
-                  ).length > 0 ? (selectedPplaLAForAssignPS
-                    ? filteredCuttingOrderRows.filter((r) => r.contractId === selectedPplaLAForAssignPS.contractId)
-                    : filteredCuttingOrderRows
-                  ).map((row) => (
+                  {pplaAssignPsPageRows.length > 0 ? pplaAssignPsPageRows.map((row) => (
                     <TableRow
                       key={`${row.contractId}-${row.id}`}
                       className={cn(
@@ -4773,6 +4869,7 @@ export default function MyProduceDashboard() {
                       )}
                       onClick={() => {
                         setSelectedPplaAssignPSRow(row);
+                        setPplaAllocationsPage(1);
                         setPplaSubtab('allocations');
                       }}
                     >
@@ -4789,14 +4886,18 @@ export default function MyProduceDashboard() {
                         />
                       </TableCell>
                       <TableCell className="font-bold text-xs">
-                        <Input
-                          defaultValue={row.ps}
-                          className="h-8 min-w-[72px]"
-                          onClick={(event) => event.stopPropagation()}
-                          onBlur={(event) => {
-                            handleInlineCuttingOrderRowUpdate(row, { ps: event.target.value });
-                          }}
-                        />
+                        <Select value={row.ps || 'PS1'} onValueChange={(value) => handleInlineCuttingOrderRowUpdate(row, { ps: value })}>
+                          <SelectTrigger className="h-8 w-[80px] text-xs" onClick={(event) => event.stopPropagation()}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="PS1">PS1</SelectItem>
+                            <SelectItem value="PS2">PS2</SelectItem>
+                            <SelectItem value="PS3">PS3</SelectItem>
+                            <SelectItem value="PS4">PS4</SelectItem>
+                            <SelectItem value="PS5">PS5</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </TableCell>
                       <TableCell className="text-xs font-bold uppercase">{row.shippingLine}</TableCell>
                       {/* <TableCell className="text-xs text-gray-500 font-semibold">{row.bookingNo}</TableCell>
@@ -4882,6 +4983,34 @@ export default function MyProduceDashboard() {
                   )}
                 </TableBody>
               </Table>
+              <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-xs text-slate-600">
+                <span>
+                  Showing {pplaAssignPsPageRows.length} of {pplaAssignPsRows.length} rows
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-3"
+                    disabled={pplaAssignPsPage <= 1}
+                    onClick={() => setPplaAssignPsPage((prev) => Math.max(1, prev - 1))}
+                  >
+                    Previous
+                  </Button>
+                  <span className="min-w-[80px] text-center font-semibold text-slate-700">
+                    {pplaAssignPsPage} / {pplaAssignPsTotalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-3"
+                    disabled={pplaAssignPsPage >= pplaAssignPsTotalPages}
+                    onClick={() => setPplaAssignPsPage((prev) => Math.min(pplaAssignPsTotalPages, prev + 1))}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
             </div>
           </TabsContent>
           <TabsContent value="allocations" className="p-6 m-0">
@@ -4953,13 +5082,7 @@ export default function MyProduceDashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(selectedPplaAssignPSRow
-                    ? filteredCuttingOrderRows.filter((r) => r.contractId === selectedPplaAssignPSRow.contractId && r.id === selectedPplaAssignPSRow.id)
-                    : filteredCuttingOrderRows
-                  ).length > 0 ? (selectedPplaAssignPSRow
-                    ? filteredCuttingOrderRows.filter((r) => r.contractId === selectedPplaAssignPSRow.contractId && r.id === selectedPplaAssignPSRow.id)
-                    : filteredCuttingOrderRows
-                  ).map((row) => (
+                  {pplaAllocationPageRows.length > 0 ? pplaAllocationPageRows.map((row) => (
                     <TableRow key={`${row.contractId}-${row.id}`} className="h-16 hover:bg-gray-50/50">
                       <TableCell className="text-center">
                         <Checkbox
@@ -4987,7 +5110,7 @@ export default function MyProduceDashboard() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="__none">Unassigned</SelectItem>
-                            {bookingNumberOptions.map((bookingNo) => (
+                            {laLBoundBookingNumbers.map((bookingNo) => (
                               <SelectItem key={bookingNo} value={bookingNo}>{bookingNo}</SelectItem>
                             ))}
                           </SelectContent>
@@ -5066,7 +5189,7 @@ export default function MyProduceDashboard() {
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               className="gap-3 py-2.5 cursor-pointer font-medium"
-                              onClick={() => openEditCuttingOrderModal(row)}
+                              onClick={() => setIsComingSoonModalOpen(true)}
                             >
                               <Check className="h-4 w-4 text-gray-500" /> Enroute PS
                             </DropdownMenuItem>
@@ -5083,6 +5206,34 @@ export default function MyProduceDashboard() {
                   )}
                 </TableBody>
               </Table>
+              <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-xs text-slate-600">
+                <span>
+                  Showing {pplaAllocationPageRows.length} of {pplaAllocationRows.length} rows
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-3"
+                    disabled={pplaAllocationsPage <= 1}
+                    onClick={() => setPplaAllocationsPage((prev) => Math.max(1, prev - 1))}
+                  >
+                    Previous
+                  </Button>
+                  <span className="min-w-[80px] text-center font-semibold text-slate-700">
+                    {pplaAllocationsPage} / {pplaAllocationsTotalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-3"
+                    disabled={pplaAllocationsPage >= pplaAllocationsTotalPages}
+                    onClick={() => setPplaAllocationsPage((prev) => Math.min(pplaAllocationsTotalPages, prev + 1))}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
             </div>
           </TabsContent>
         </Tabs>
@@ -5139,9 +5290,25 @@ export default function MyProduceDashboard() {
                       <TableCell className="text-sm font-semibold text-slate-900">{booking.bookingNumber}</TableCell>
                       <TableCell className="text-sm text-slate-700">{booking.shippingLine}</TableCell>
                       <TableCell className="text-sm text-slate-700">{booking.vesselName}</TableCell>
-                      <TableCell className="text-sm text-slate-700">{booking.pod}</TableCell>
+                      <TableCell className="text-sm text-slate-700">
+                        <Select value={booking.pod || '--'} onValueChange={() => {}}>
+                          <SelectTrigger className="h-8 w-[120px] text-xs" disabled>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Singapore">Singapore</SelectItem>
+                            <SelectItem value="Hong Kong">Hong Kong</SelectItem>
+                            <SelectItem value="Shanghai">Shanghai</SelectItem>
+                            <SelectItem value="Rotterdam">Rotterdam</SelectItem>
+                            <SelectItem value="Hamburg">Hamburg</SelectItem>
+                            <SelectItem value="Port Klang">Port Klang</SelectItem>
+                            <SelectItem value="Dubai">Dubai</SelectItem>
+                            <SelectItem value="Suez">Suez</SelectItem>
+                            <SelectItem value="--">--</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
                       <TableCell className="text-sm text-slate-700">{booking.attachmentUrl || '--'}</TableCell>
-                      <TableCell className="text-sm text-slate-700">{booking.containersConfirmed || 0}</TableCell>
                       <TableCell className="text-sm text-slate-700">{booking.weekNumber}</TableCell>
                       <TableCell className="text-right">
                         <Button
@@ -5168,7 +5335,7 @@ export default function MyProduceDashboard() {
               <Tabs value={pplaBookingModalTab} onValueChange={(value) => setPplaBookingModalTab(value as PplaBookingModalTab)}>
                 <div className="border-b border-slate-200 px-4 pt-4">
                   <TabsList className="bg-transparent p-0 h-auto gap-6">
-                    <TabsTrigger value="add-new" className="rounded-none border-b-2 border-transparent px-0 py-2 text-xs font-bold uppercase tracking-[0.16em] data-[state=active]:border-anflocor-green data-[state=active]:bg-transparent">Add New Booking</TabsTrigger>
+                    <TabsTrigger  value="add-new" className="rounded-none border-b-2 border-transparent px-0 py-2 text-xs font-bold uppercase tracking-[0.16em] data-[state=active]:border-anflocor-green data-[state=active]:bg-transparent">Add New Booking</TabsTrigger>
                     <TabsTrigger value="bind-existing" className="rounded-none border-b-2 border-transparent px-0 py-2 text-xs font-bold uppercase tracking-[0.16em] data-[state=active]:border-anflocor-green data-[state=active]:bg-transparent">Bind Existing Bookings</TabsTrigger>
                   </TabsList>
                 </div>
@@ -5468,6 +5635,21 @@ export default function MyProduceDashboard() {
                 </TabsContent>
               </Tabs>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isComingSoonModalOpen} onOpenChange={setIsComingSoonModalOpen}>
+        <DialogContent className="max-w-sm p-0 overflow-hidden bg-white border-none shadow-2xl">
+          <div className="p-8 flex flex-col items-center gap-4 text-center">
+            <div className="h-14 w-14 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center">
+              <Clock className="h-7 w-7 text-amber-500" />
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-gray-900 tracking-tight">Coming Soon</h2>
+              <p className="mt-1 text-sm text-slate-500">The <span className="font-semibold text-slate-700">Enroute PS</span> feature is currently under development and will be available soon.</p>
+            </div>
+            <Button className="mt-2 w-full bg-emerald-700 text-white hover:bg-emerald-800" onClick={() => setIsComingSoonModalOpen(false)}>Got it</Button>
           </div>
         </DialogContent>
       </Dialog>
