@@ -3478,6 +3478,7 @@ export default function MyProduceDashboard() {
               <TableHead className="text-[9px] font-black uppercase text-gray-400">POD</TableHead>
               <TableHead className="text-[9px] font-black uppercase text-gray-400">Cut-Off Date</TableHead>
               <TableHead className="text-[9px] font-black uppercase text-gray-400">ETD</TableHead>
+              <TableHead className="text-[9px] font-black uppercase text-gray-400">Task Date</TableHead>
               <TableHead className="text-[9px] font-black uppercase text-gray-400">SKU</TableHead>
               <TableHead className="text-[9px] font-black uppercase text-gray-400">Palletization</TableHead>
               <TableHead className="text-[9px] font-black uppercase text-gray-400">Status</TableHead>
@@ -3523,6 +3524,14 @@ export default function MyProduceDashboard() {
                 <TableCell className="text-xs uppercase">{row.pod}</TableCell>
                 <TableCell className="text-xs text-gray-500">{row.cutOffDate}</TableCell>
                 <TableCell className="text-xs text-gray-500">{row.etd}</TableCell>
+                <TableCell className="text-xs text-gray-500">
+                  <Input
+                    type="date"
+                    value={row.taskDate || ''}
+                    onChange={(event) => handleInlineCuttingOrderRowUpdate(row, { taskDate: event.target.value })}
+                    className="h-8 w-[150px]"
+                  />
+                </TableCell>
                 <TableCell className="text-xs font-bold">{row.sku}</TableCell>
                 <TableCell className="text-xs">{row.palletization}</TableCell>
                 <TableCell className="text-center">
@@ -5291,25 +5300,9 @@ export default function MyProduceDashboard() {
                       <TableCell className="text-sm font-semibold text-slate-900">{booking.bookingNumber}</TableCell>
                       <TableCell className="text-sm text-slate-700">{booking.shippingLine}</TableCell>
                       <TableCell className="text-sm text-slate-700">{booking.vesselName}</TableCell>
-                      <TableCell className="text-sm text-slate-700">
-                        <Select value={booking.pod || '--'} onValueChange={() => {}}>
-                          <SelectTrigger className="h-8 w-[120px] text-xs" disabled>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Singapore">Singapore</SelectItem>
-                            <SelectItem value="Hong Kong">Hong Kong</SelectItem>
-                            <SelectItem value="Shanghai">Shanghai</SelectItem>
-                            <SelectItem value="Rotterdam">Rotterdam</SelectItem>
-                            <SelectItem value="Hamburg">Hamburg</SelectItem>
-                            <SelectItem value="Port Klang">Port Klang</SelectItem>
-                            <SelectItem value="Dubai">Dubai</SelectItem>
-                            <SelectItem value="Suez">Suez</SelectItem>
-                            <SelectItem value="--">--</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
+                      <TableCell className="text-sm text-slate-700">{booking.pod || '--'}</TableCell>
                       <TableCell className="text-sm text-slate-700">{booking.attachmentUrl || '--'}</TableCell>
+                      <TableCell className="text-sm text-slate-700">{booking.containersConfirmed ?? 0}</TableCell>
                       <TableCell className="text-sm text-slate-700">{booking.weekNumber}</TableCell>
                       <TableCell className="text-right">
                         <Button
