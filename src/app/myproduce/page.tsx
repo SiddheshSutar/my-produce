@@ -3436,6 +3436,7 @@ export default function MyProduceDashboard() {
         <div className="p-6 border-b flex justify-between items-center">
           <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">RECENT CUTTING ORDERS</h3>
           <div className="flex gap-2">
+            <Button variant="outline" className="h-8 px-3 text-[10px] font-black uppercase tracking-widest border-gray-100 gap-2" onClick={() => setIsComingSoonModalOpen(true)}><Download className="h-3 w-3" /> EXPORT</Button>
             <Button variant="outline" className="h-8 px-3 text-[10px] font-black uppercase tracking-widest border-gray-100 gap-2"><Filter className="h-3 w-3" /> FILTER</Button>
             {selectedFilteredCuttingOrderRows.length > 0 && (
               <Button
@@ -5639,20 +5640,6 @@ export default function MyProduceDashboard() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isComingSoonModalOpen} onOpenChange={setIsComingSoonModalOpen}>
-        <DialogContent className="max-w-sm p-0 overflow-hidden bg-white border-none shadow-2xl">
-          <div className="p-8 flex flex-col items-center gap-4 text-center">
-            <div className="h-14 w-14 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center">
-              <Clock className="h-7 w-7 text-amber-500" />
-            </div>
-            <div>
-              <h2 className="text-lg font-black text-gray-900 tracking-tight">Coming Soon</h2>
-              <p className="mt-1 text-sm text-slate-500">The <span className="font-semibold text-slate-700">Enroute PS</span> feature is currently under development and will be available soon.</p>
-            </div>
-            <Button className="mt-2 w-full bg-emerald-700 text-white hover:bg-emerald-800" onClick={() => setIsComingSoonModalOpen(false)}>Got it</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 
@@ -6107,12 +6094,12 @@ export default function MyProduceDashboard() {
       <aside className="w-64 bg-anflocor-green text-white flex flex-col shrink-0 shadow-xl no-print">
         <div className="p-6 flex items-center space-x-3 border-b border-white/10"><div className="bg-white/10 p-2 rounded-lg"><Leaf className="h-6 w-6" /></div><span className="text-xl font-bold tracking-tighter">myProduce</span></div>
         <nav className="flex-1 p-4 space-y-1">
-          <Button variant="ghost" onClick={() => navigateToView('dashboard')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'dashboard' && "bg-white/10")}><LayoutDashboard className="mr-3 h-5 w-5" />Dashboard</Button>
-          <Button variant="ghost" onClick={() => navigateToView('loading-advice')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'loading-advice' && "bg-white/10")}><FileCheck className="mr-3 h-5 w-5" />Loading Advice</Button>
-          <Button variant="ghost" onClick={() => navigateToView('bookings')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'bookings' && "bg-white/10")}><Ship className="mr-3 h-5 w-5" />Bookings</Button>
-          <Button variant="ghost" onClick={() => navigateToView('cutting-order')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'cutting-order' && "bg-white/10")}><Scissors className="mr-3 h-5 w-5" />Cutting Orders</Button>
-          <Button variant="ghost" onClick={() => navigateToView('trips')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'trips' && "bg-white/10")}><Truck className="mr-3 h-5 w-5" />Trips</Button>
           <Button variant="ghost" onClick={() => navigateToView('ppla')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'ppla' && "bg-white/10")}><Box className="mr-3 h-5 w-5" />PPLA</Button>
+          <Button variant="ghost" onClick={() => navigateToView('cutting-order')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'cutting-order' && "bg-white/10")}><Scissors className="mr-3 h-5 w-5" />PS</Button>
+          {/* <Button variant="ghost" onClick={() => navigateToView('dashboard')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'dashboard' && "bg-white/10")}><LayoutDashboard className="mr-3 h-5 w-5" />Dashboard</Button> */}
+          {/* <Button variant="ghost" onClick={() => navigateToView('loading-advice')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'loading-advice' && "bg-white/10")}><FileCheck className="mr-3 h-5 w-5" />Loading Advice</Button> */}
+          {/* <Button variant="ghost" onClick={() => navigateToView('bookings')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'bookings' && "bg-white/10")}><Ship className="mr-3 h-5 w-5" />Bookings</Button> */}
+          {/* <Button variant="ghost" onClick={() => navigateToView('trips')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'trips' && "bg-white/10")}><Truck className="mr-3 h-5 w-5" />Trips</Button> */}
         </nav>
         <div className="p-4 border-t border-white/10"><Button onClick={handleSignOut} variant="ghost" className="w-full justify-start text-white/70 hover:text-red-400"><LogOut className="mr-3 h-5 w-5" />Sign Out</Button></div>
       </aside>
@@ -6120,6 +6107,22 @@ export default function MyProduceDashboard() {
         <div className="flex justify-end mb-4"><div className="flex items-center space-x-3 text-sm text-gray-400 font-medium"><User className="h-4 w-4" /><span>{user?.email} (Admin)</span></div></div>
         {renderContent()}
       </main>
+
+      {/* COMING SOON MODAL */}
+      <Dialog open={isComingSoonModalOpen} onOpenChange={setIsComingSoonModalOpen}>
+        <DialogContent className="max-w-sm p-0 overflow-hidden bg-white border-none shadow-2xl">
+          <div className="p-8 flex flex-col items-center gap-4 text-center">
+            <div className="h-14 w-14 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center">
+              <Clock className="h-7 w-7 text-amber-500" />
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-gray-900 tracking-tight">Coming Soon</h2>
+              <p className="mt-1 text-sm text-slate-500">This feature is currently under development and will be available soon.</p>
+            </div>
+            <Button className="mt-2 w-full bg-emerald-700 text-white hover:bg-emerald-800" onClick={() => setIsComingSoonModalOpen(false)}>Got it</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* NEW LOADING ADVICE MODAL */}
       <Dialog open={isNewLAOpen} onOpenChange={setIsNewLAOpen}>
