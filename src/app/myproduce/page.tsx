@@ -475,6 +475,9 @@ export default function MyProduceDashboard() {
   const [isShippingDocUploadOpen, setIsShippingDocUploadOpen] = useState(false);
   const [selectedTripForDocs, setSelectedTripForDocs] = useState<any>(null);
   const [isPplaBookingsModalOpen, setIsPplaBookingsModalOpen] = useState(false);
+  const [pplaSubtab, setPplaSubtab] = useState<string>('loading-advice');
+  const [selectedPplaLAForAssignPS, setSelectedPplaLAForAssignPS] = useState<LoadingAdviceListRow | null>(null);
+  const [selectedPplaAssignPSRow, setSelectedPplaAssignPSRow] = useState<CuttingOrderListRow | null>(null);
   const [selectedPplaLARowForBookings, setSelectedPplaLARowForBookings] = useState<LoadingAdviceListRow | null>(null);
   const [pplaBookingModalTab, setPplaBookingModalTab] = useState<PplaBookingModalTab>('add-new');
   const [isPplaAddBookingFormOpen, setIsPplaAddBookingFormOpen] = useState(false);
@@ -4549,7 +4552,7 @@ export default function MyProduceDashboard() {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <Tabs defaultValue="loading-advice" className="w-full">
+        <Tabs value={pplaSubtab} onValueChange={setPplaSubtab} className="w-full">
           <div className="border-b px-6 pt-6">
             <TabsList className="bg-transparent border-none p-0 gap-8 w-full justify-start h-auto">
               <TabsTrigger 
@@ -4629,10 +4632,13 @@ export default function MyProduceDashboard() {
                     filteredLoadingAdviceRows.map((row) => (
                       <TableRow
                         key={row.id}
-                        onClick={() => setSelectedContractId(row.contractId)}
+                        onClick={() => {
+                          setSelectedPplaLAForAssignPS(row);
+                          setPplaSubtab('bookings');
+                        }}
                         className={cn(
                           'h-14 cursor-pointer hover:bg-slate-50',
-                          selectedContractId === row.contractId && 'bg-emerald-50/70 ring-1 ring-inset ring-emerald-200'
+                          selectedPplaLAForAssignPS?.contractId === row.contractId && 'bg-emerald-50/70 ring-1 ring-inset ring-emerald-200'
                         )}
                       >
                         <TableCell className="px-3 py-3 text-center">
@@ -4693,6 +4699,24 @@ export default function MyProduceDashboard() {
             </Card>
           </TabsContent>
           <TabsContent value="bookings" className="p-6 m-0">
+            {selectedPplaLAForAssignPS ? (
+              <div className="mb-4 flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+                <div className="h-2 w-2 rounded-full bg-emerald-500" />
+                <span className="text-xs font-bold uppercase tracking-wide text-emerald-800">Selected LA:</span>
+                <span className="text-xs font-semibold text-emerald-900">{selectedPplaLAForAssignPS.farm} &mdash; {selectedPplaLAForAssignPS.pod} &mdash; {selectedPplaLAForAssignPS.shippingLine} &mdash; {selectedPplaLAForAssignPS.totalVans} van{Number(selectedPplaLAForAssignPS.totalVans) !== 1 ? 's' : ''}</span>
+                <button
+                  type="button"
+                  className="ml-auto text-[10px] font-bold uppercase tracking-wider text-emerald-700 hover:text-emerald-900"
+                  onClick={() => setSelectedPplaLAForAssignPS(null)}
+                >
+                  Clear
+                </button>
+              </div>
+            ) : (
+              <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+                Click any row in the <span className="font-bold">Loading Advice</span> tab to filter cutting orders by LA.
+              </div>
+            )}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="p-6 border-b flex justify-between items-center">
                 <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">RECENT CUTTING ORDERS</h3>
@@ -4729,14 +4753,30 @@ export default function MyProduceDashboard() {
                     <TableHead className="text-[9px] font-black uppercase text-gray-400">Task Date</TableHead>
                     <TableHead className="text-[9px] font-black uppercase text-gray-400">SKU</TableHead>
                     <TableHead className="text-[9px] font-black uppercase text-gray-400">Palletization</TableHead>
-                    <TableHead className="text-[9px] font-black uppercase text-gray-400">Status</TableHead>
+                    {/* <TableHead className="text-[9px] font-black uppercase text-gray-400">Status</TableHead> */}
                     <TableHead className="text-[9px] font-black uppercase text-right text-gray-400">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredCuttingOrderRows.length > 0 ? filteredCuttingOrderRows.map((row) => (
-                    <TableRow key={`${row.contractId}-${row.id}`} className="h-16 hover:bg-gray-50/50">
-                      <TableCell className="text-center">
+                  {(selectedPplaLAForAssignPS
+                    ? filteredCuttingOrderRows.filter((r) => r.contractId === selectedPplaLAForAssignPS.contractId)
+                    : filteredCuttingOrderRows
+                  ).length > 0 ? (selectedPplaLAForAssignPS
+                    ? filteredCuttingOrderRows.filter((r) => r.contractId === selectedPplaLAForAssignPS.contractId)
+                    : filteredCuttingOrderRows
+                  ).map((row) => (
+                    <TableRow
+                      key={`${row.contractId}-${row.id}`}
+                      className={cn(
+                        'h-16 cursor-pointer hover:bg-gray-50/50',
+                        selectedPplaAssignPSRow?.id === row.id && selectedPplaAssignPSRow?.contractId === row.contractId && 'bg-emerald-50/70 ring-1 ring-inset ring-emerald-200'
+                      )}
+                      onClick={() => {
+                        setSelectedPplaAssignPSRow(row);
+                        setPplaSubtab('allocations');
+                      }}
+                    >
+                      <TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
                         <Checkbox
                           checked={selectedCuttingOrderKeys.includes(cuttingOrderRowKey(row))}
                           onCheckedChange={(checked) => {
@@ -4794,7 +4834,7 @@ export default function MyProduceDashboard() {
                       </TableCell>
                       <TableCell className="text-xs font-bold">{row.sku}</TableCell>
                       <TableCell className="text-xs">{row.palletization}</TableCell>
-                      <TableCell className="text-center">
+                      {/* <TableCell className="text-center">
                         <Select
                           value={normalizeCuttingOrderStatus(row.status)}
                           onValueChange={(value) => handleUpdateCuttingOrderStatus(row, value as CuttingOrderStatus)}
@@ -4814,7 +4854,7 @@ export default function MyProduceDashboard() {
                             <SelectItem value="DEPART">Depart</SelectItem>
                           </SelectContent>
                         </Select>
-                      </TableCell>
+                      </TableCell> */}
                       <TableCell className="text-right">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -4845,6 +4885,24 @@ export default function MyProduceDashboard() {
             </div>
           </TabsContent>
           <TabsContent value="allocations" className="p-6 m-0">
+            {selectedPplaAssignPSRow ? (
+              <div className="mb-4 flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+                <div className="h-2 w-2 rounded-full bg-emerald-500" />
+                <span className="text-xs font-bold uppercase tracking-wide text-emerald-800">Selected CO:</span>
+                <span className="text-xs font-semibold text-emerald-900">PS {selectedPplaAssignPSRow.ps} &mdash; {selectedPplaAssignPSRow.shippingLine} &mdash; {selectedPplaAssignPSRow.pod} &mdash; {selectedPplaAssignPSRow.sku}</span>
+                <button
+                  type="button"
+                  className="ml-auto text-[10px] font-bold uppercase tracking-wider text-emerald-700 hover:text-emerald-900"
+                  onClick={() => setSelectedPplaAssignPSRow(null)}
+                >
+                  Clear
+                </button>
+              </div>
+            ) : (
+              <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+                Click any row in the <span className="font-bold">Assign PS</span> tab to filter records by cutting order.
+              </div>
+            )}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="p-6 border-b flex justify-between items-center">
                 <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">RECENT CUTTING ORDERS</h3>
@@ -4895,7 +4953,13 @@ export default function MyProduceDashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredCuttingOrderRows.length > 0 ? filteredCuttingOrderRows.map((row) => (
+                  {(selectedPplaAssignPSRow
+                    ? filteredCuttingOrderRows.filter((r) => r.contractId === selectedPplaAssignPSRow.contractId && r.id === selectedPplaAssignPSRow.id)
+                    : filteredCuttingOrderRows
+                  ).length > 0 ? (selectedPplaAssignPSRow
+                    ? filteredCuttingOrderRows.filter((r) => r.contractId === selectedPplaAssignPSRow.contractId && r.id === selectedPplaAssignPSRow.id)
+                    : filteredCuttingOrderRows
+                  ).map((row) => (
                     <TableRow key={`${row.contractId}-${row.id}`} className="h-16 hover:bg-gray-50/50">
                       <TableCell className="text-center">
                         <Checkbox
