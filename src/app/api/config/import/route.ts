@@ -42,54 +42,63 @@ export async function POST(request: NextRequest) {
         match: ['pricing'],
         index: 0,
         label: 'Pricing Condition',
+        columnName: null,
       },
       {
         key: 'incoterm',
         match: ['incoterm'],
         index: 1,
         label: 'Incoterm',
+        columnName: null,
       },
       {
         key: 'customer-mapping',
         match: ['customer mapping', 'customer'],
         index: 3,
         label: 'Customer Mapping',
+        columnName: null,
       },
       {
         key: 'pack-type',
-        match: ['material'],
+        match: ['material', 'pack type', 'kindofpack', 'kind of pack'],
         index: 4,
         label: 'Material Mapping (Pack Type)',
+        columnName: null,
       },
       {
         key: 'shipping-lines',
         match: ['brand'],
         index: 5,
         label: 'Brand Mapping',
+        columnName: null,
       },
       {
         key: 'vessels',
         match: ['profit'],
         index: 6,
         label: 'Profit Center Mapping',
+        columnName: null,
       },
       {
         key: 'port-of-loading',
         match: ['singleton', 'singletons', 'port of loading', 'pol', 'port loading'],
         index: 7,
         label: 'Singletons (Port of Loading)',
+        columnName: 'PORT OF LOADING',
       },
       {
         key: 'port-of-destination',
-        match: ['port of destination', 'pod', 'destination', 'port destination'],
+        match: ['port of destination', 'pod', 'destination', 'port destination', 'singleton'],
         index: 7,
         label: 'Port of Destination',
+        columnName: 'PORT OF DESTINATION',
       },
       {
         key: 'customer-to-packtype',
         match: ['customer to pack', 'customer pack'],
         index: 8,
         label: 'Customer to Pack Type',
+        columnName: null,
       },
     ];
 
@@ -107,7 +116,17 @@ export async function POST(request: NextRequest) {
       if (sheetName && workbook.Sheets[sheetName]) {
         try {
           const sheet = workbook.Sheets[sheetName];
-          const rows = XLSX.utils.sheet_to_json(sheet);
+          let rows = XLSX.utils.sheet_to_json(sheet);
+          
+          // If this config has a specific column to extract, filter to that column only
+          if (config.columnName) {
+            rows = rows
+              .map((row: any) => ({
+                [config.columnName]: row[config.columnName]
+              }))
+              .filter((row: any) => row[config.columnName] && row[config.columnName].toString().trim() !== '');
+          }
+          
           const createdCount = rows.length;
 
           // Enhanced logging for customer-mapping and customer-to-packtype to debug column issues

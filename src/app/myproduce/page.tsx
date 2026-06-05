@@ -499,6 +499,40 @@ function SearchableCustomerDropdown({
   );
 }
 
+interface PortDropdownProps {
+  selectedPort: string;
+  portOptions: any[];
+  onSelectPort: (port: string) => void;
+  placeholder?: string;
+  className?: string;
+}
+
+function PortOfDestinationDropdown({
+  selectedPort,
+  portOptions,
+  onSelectPort,
+  placeholder = "Select Port",
+  className = "h-10"
+}: PortDropdownProps) {
+  return (
+    <Select value={selectedPort || ''} onValueChange={onSelectPort}>
+      <SelectTrigger className={`${className} rounded-sm border-slate-300 bg-white shadow-sm`}>
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        {portOptions?.map((p: any, idx: number) => {
+          const displayValue = p['PORT OF DESTINATION'] || p.Port || p['Port Name'] || p.portName || Object.values(p).find(v => v && v.toString().trim()?.length > 0) || `Port ${idx}`;
+          return (
+            <SelectItem key={`${idx}-${displayValue}`} value={String(displayValue).trim()}>
+              {String(displayValue).trim()}
+            </SelectItem>
+          );
+        })}
+      </SelectContent>
+    </Select>
+  );
+}
+
 export default function MyProduceDashboard() {
   const router = useRouter();
   const pathname = usePathname();
@@ -3783,7 +3817,7 @@ export default function MyProduceDashboard() {
     const nextStatus = getNextCuttingOrderStatus(row.status);
     await handleUpdateCuttingOrderStatus(row, nextStatus);
   };
-console.log(`hex: `, customerMappings)
+
   const shippingDocRows: Array<{
     label: string;
     actions: ShippingDocAction[];
@@ -6008,7 +6042,12 @@ console.log(`hex: `, customerMappings)
                           </div>
                           <div className="space-y-1">
                             <Label className="text-[10px] font-bold uppercase text-slate-500">POD</Label>
-                            <Input value={pplaNewBookingDraft.pod} onChange={(e) => setPplaNewBookingDraft((current) => ({ ...current, pod: e.target.value }))} />
+                            <PortOfDestinationDropdown
+                              selectedPort={pplaNewBookingDraft.pod}
+                              portOptions={portOfDestinations}
+                              onSelectPort={(port) => setPplaNewBookingDraft((current) => ({ ...current, pod: port }))}
+                              className="h-10"
+                            />
                           </div>
                           <div className="space-y-1 md:col-span-2">
                             <Label className="text-[10px] font-bold uppercase text-slate-500">Attachments ({pplaBookingAttachmentFiles?.length || 0}/2)</Label>
@@ -6140,7 +6179,7 @@ console.log(`hex: `, customerMappings)
                       <div>
                         <div className="mb-4">
                           <h3 className="text-sm font-semibold text-slate-700 mb-2">Editing Booking</h3>
-                          <p className="text-xs text-slate-500">Current Status: <Badge className="ml-2" variant={selectedPplaBookingForEdit.bookingStatus === 'Booking Confirmed' ? 'default' : 'secondary'}>{selectedPplaBookingForEdit.bookingStatus || 'Booking Created'}</Badge></p>
+                          <div className="text-xs text-slate-500 flex items-center gap-2">Current Status: <Badge variant={selectedPplaBookingForEdit.bookingStatus === 'Booking Confirmed' ? 'default' : 'secondary'}>{selectedPplaBookingForEdit.bookingStatus || 'Booking Created'}</Badge></div>
                         </div>
                         <div className="rounded-md border bg-white p-4">
                           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -6158,7 +6197,12 @@ console.log(`hex: `, customerMappings)
                             </div>
                             <div className="space-y-1">
                               <Label className="text-[10px] font-bold uppercase text-slate-500">POD</Label>
-                              <Input value={pplaEditBookingDraft.pod} onChange={(e) => setPplaEditBookingDraft((current) => ({ ...current, pod: e.target.value }))} />
+                              <PortOfDestinationDropdown
+                                selectedPort={pplaEditBookingDraft.pod}
+                                portOptions={portOfDestinations}
+                                onSelectPort={(port) => setPplaEditBookingDraft((current) => ({ ...current, pod: port }))}
+                                className="h-10"
+                              />
                             </div>
                             <div className="space-y-1 md:col-span-2">
                               <Label className="text-[10px] font-bold uppercase text-slate-500">Attachments ({(pplaEditBookingDraft.attachmentUrls?.length || 0) + (pplaEditBookingAttachmentFiles?.length || 0)}/2)</Label>
@@ -6701,13 +6745,13 @@ console.log(`hex: `, customerMappings)
                           ))}
                         </>
                       )}
-                      {selectedConfigType === 'pack-type' && (
+                      {selectedConfigType === 'pack-type' && materialPackTypes.length > 0 && (
                         <>
-                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Pack Type</TableHead>
-                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">SAP ID</TableHead>
-                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">SAP Code</TableHead>
-                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">SAP Desc</TableHead>
-                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Description</TableHead>
+                          {Object.keys(materialPackTypes[0]).map((columnName) => (
+                            <TableHead key={columnName} className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                              {columnName}
+                            </TableHead>
+                          ))}
                         </>
                       )}
                       {selectedConfigType === 'shipping-lines' && (
@@ -6781,11 +6825,11 @@ console.log(`hex: `, customerMappings)
                     ) : selectedConfigType === 'pack-type' && materialPackTypes.length > 0 ? (
                       materialPackTypes.map((item: any, index: number) => (
                         <TableRow key={index}>
-                          <TableCell className="text-sm font-semibold text-slate-900">{item['Pack Type'] || item.PackType || '--'}</TableCell>
-                          <TableCell className="text-sm text-slate-700">{item['SAPMPT_ID'] || item.SAPMPT_ID || '--'}</TableCell>
-                          <TableCell className="text-sm text-slate-700">{item['SAPC_Code'] || item.SAPC_Code || '--'}</TableCell>
-                          <TableCell className="text-sm text-slate-700">{item['SAPC_Desc'] || item.SAPC_Desc || '--'}</TableCell>
-                          <TableCell className="text-sm text-slate-700">{item.Description || item.description || '--'}</TableCell>
+                          {Object.keys(item).map((columnName) => (
+                            <TableCell key={`${index}-${columnName}`} className="text-sm text-slate-700">
+                              {item[columnName] || '--'}
+                            </TableCell>
+                          ))}
                         </TableRow>
                       ))
                     ) : selectedConfigType === 'shipping-lines' && brandMappings.length > 0 ? (
@@ -7383,14 +7427,17 @@ console.log(`hex: `, customerMappings)
                           <TableCell className="px-3 py-3 align-top">
                             <Select value={row.pol} onValueChange={(v) => setLaRows(laRows.map((r) => (r.id === row.id ? { ...r, pol: v } : r)))}>
                               <SelectTrigger className="h-10 rounded-sm border-slate-300 bg-white shadow-sm">
-                                <SelectValue placeholder="Select" />
+                                <SelectValue placeholder="Select Port" />
                               </SelectTrigger>
                               <SelectContent>
-                                {polMappings?.map((p: any) => (
-                                  <SelectItem key={p.id} value={p.portName}>
-                                    {p.portName}
-                                  </SelectItem>
-                                ))}
+                                {portOfLoadings?.map((p: any, idx: number) => {
+                                  const displayValue = p['PORT OF LOADING'] || p.Port || p['Port Name'] || p.portName || p.Singletons || Object.values(p).find(v => v && v.toString().trim()?.length > 0) || 'Port';
+                                  return (
+                                    <SelectItem key={`${idx}-${displayValue}`} value={String(displayValue).trim()}>
+                                      {String(displayValue).trim()}
+                                    </SelectItem>
+                                  );
+                                })}
                               </SelectContent>
                             </Select>
                           </TableCell>
@@ -7400,11 +7447,14 @@ console.log(`hex: `, customerMappings)
                                 <SelectValue placeholder="City/Port" />
                               </SelectTrigger>
                               <SelectContent>
-                                {podMappings?.map((p: any) => (
-                                  <SelectItem key={p.id} value={p.portName}>
-                                    {p.portName}
-                                  </SelectItem>
-                                ))}
+                                {portOfDestinations?.map((p: any, idx: number) => {
+                                  const displayValue = p['PORT OF DESTINATION'] || p.Port || p['Port Name'] || p.portName || p.Singletons || Object.values(p).find(v => v && v.toString().trim()?.length > 0) || 'Port';
+                                  return (
+                                    <SelectItem key={`${idx}-${displayValue}`} value={String(displayValue).trim()}>
+                                      {String(displayValue).trim()}
+                                    </SelectItem>
+                                  );
+                                })}
                               </SelectContent>
                             </Select>
                           </TableCell>
