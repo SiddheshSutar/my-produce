@@ -2,12 +2,12 @@
 "use client";
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import {
-  LayoutDashboard,
-  Settings,
-  Package,
-  Truck,
-  BarChart3,
+import { 
+  LayoutDashboard, 
+  Settings, 
+  Package, 
+  Truck, 
+  BarChart3, 
   User,
   LogOut,
   Leaf,
@@ -22,6 +22,32 @@ import {
   Loader2,
   Trash2,
   Search,
+  FileText,
+  Plus,
+  FileCheck,
+  Sparkles,
+  Paperclip,
+  MapPin,
+  Ship,
+  FileSignature,
+  Mail,
+  Check,
+  Calendar as CalendarIcon,
+  Save,
+  Edit2,
+  CheckSquare,
+  Square,
+  MoreVertical,
+  X,
+  Split,
+  Copy,
+  Printer,
+  Download,
+  FileSpreadsheet,
+  RefreshCcw,
+  ChevronDown,
+  ChevronLeft,
+  Bell,
   HelpCircle,
   Filter,
   Info,
@@ -35,26 +61,7 @@ import {
   Camera,
   Image as ImageIcon,
   LayoutGrid,
-  Signature,
-  Bell,
-  Plus,
-  RefreshCcw,
-  MoreVertical,
-  FileText,
-  ChevronLeft,
-  X,
-  Download,
-  ChevronDown,
-  Check,
-  Ship,
-  FileCheck,
-  FileSignature,
-  Copy,
-  CheckSquare,
-  DollarSign,
-  Globe,
-  Building,
-  Link,
+  Signature
 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -126,20 +133,11 @@ import { signOut } from 'firebase/auth';
 import { extractContractData } from '@/ai/flows/extract-contract-flow';
 import * as XLSX from 'xlsx';
 import { format } from 'date-fns';
-import { 
-  saveConfigToFirestore, 
-  loadConfigFromFirestore 
-} from '@/firebase/firestore/config-persistence';
 
-type ViewState = 'dashboard' | 'configuration' | 'customer-mapping' | 'material-mapping' | 'port-of-loading' | 'port-of-destination' | 'loading-advice' | 'contract-details' | 'cutting-order' | 'edit-cutting-orders' | 'bookings' | 'trips' | 'ppla';
+type ViewState = 'dashboard' | 'configuration' | 'customer-mapping' | 'material-mapping' | 'port-of-loading' | 'port-of-destination' | 'loading-advice' | 'contract-details' | 'cutting-order' | 'edit-cutting-orders' | 'bookings' | 'trips';
 
 type CuttingOrderStatus = 'EMPTY' | 'PENDING' | 'ONGOING' | 'DEPART';
 type LoadingAdviceWorkflowStage = 'LA_CREATED' | 'COS_CREATED' | 'READY_FOR_BOOKING' | 'BOOKINGS_CREATED';
-type BookingStatus = 'Booking Created' | 'Booking Confirmed';
-type PplaBookingModalTab = 'add-new' | 'bind-existing' | 'edit-booking';
-type PplaContainerModalTab = 'add-new' | 'bind-existing';
-
-const PPLA_PAGE_SIZE = 10;
 
 const CUTTING_ORDER_STATUS_OPTIONS: CuttingOrderStatus[] = ['EMPTY', 'PENDING', 'ONGOING', 'DEPART'];
 
@@ -187,13 +185,6 @@ const getCuttingOrderStatusClassName = (status: CuttingOrderStatus) => {
 const getNextCuttingOrderStatus = (status: CuttingOrderStatus): CuttingOrderStatus => {
   const currentIndex = CUTTING_ORDER_STATUS_OPTIONS.indexOf(normalizeCuttingOrderStatus(status));
   return CUTTING_ORDER_STATUS_OPTIONS[(currentIndex + 1) % CUTTING_ORDER_STATUS_OPTIONS.length];
-};
-
-const mapContainerAtwStatusToCuttingOrderAtwStatus = (value: any) => {
-  const normalized = String(value || '').toUpperCase();
-  if (normalized === 'Y' || normalized === 'YES' || normalized === 'AVAILABLE' || normalized === 'LOADED') return 'AVAILABLE';
-  if (normalized === 'READY') return 'READY';
-  return 'PENDING';
 };
 
 const normalizeLoadingAdviceWorkflowStage = (value: any): LoadingAdviceWorkflowStage => {
@@ -269,7 +260,6 @@ interface CORow {
   sku: string;
   palletization: string;
   containerNo: string;
-  originalContainerNo?: string;
   shippingLine: string;
   bookingNo: string;
   atwStatus: 'PENDING' | 'READY' | 'LOADED';
@@ -362,7 +352,6 @@ interface LoadingAdviceListRow {
   totalVans: string;
   sku: string;
   palletization: string;
-  bookingStatus?: string;
 }
 
 interface CuttingOrderListRow {
@@ -371,7 +360,6 @@ interface CuttingOrderListRow {
   customerName: string;
   weekNumber: string;
   ps: string;
-  taskDate: string;
   shippingLine: string;
   bookingNo: string;
   containerNo: string;
@@ -392,11 +380,8 @@ interface BookingListRow {
   shippingLine: string;
   vesselName: string;
   pod: string;
-  attachmentUrls: string[];
-  containersConfirmed: number;
   customerName: string;
   weekNumber: string;
-  bookingStatus?: BookingStatus;
 }
 
 interface DRRow {
@@ -424,81 +409,6 @@ interface COSRow {
   palletization: string;
 }
 
-// Reusable searchable customer dropdown component
-interface SearchableCustomerDropdownProps {
-  selectedCustomer: any | null;
-  customerMappings: any[];
-  onSelectCustomer: (customer: any | null) => void;
-  inputClassName?: string;
-  containerClassName?: string;
-}
-
-function SearchableCustomerDropdown({
-  selectedCustomer,
-  customerMappings,
-  onSelectCustomer,
-  inputClassName = "h-12 bg-white",
-  containerClassName = "w-[300px]"
-}: SearchableCustomerDropdownProps) {
-  const [searchText, setSearchText] = useState('');
-  const [isOpen, setIsOpen] = useState(false);
-
-  const filteredCustomers = useMemo(() => {
-    if (!searchText.trim()) return customerMappings;
-    const searchLower = searchText.toLowerCase();
-    return customerMappings.filter((c: any) =>
-      (c.Customer || '').toLowerCase().includes(searchLower) ||
-      (c.SAPC_code || '').toLowerCase().includes(searchLower)
-    );
-  }, [customerMappings, searchText]);
-
-  return (
-    <div className={containerClassName}>
-      <div className="relative">
-        <Input
-          placeholder="Search customers..."
-          value={selectedCustomer ? selectedCustomer.Customer : searchText}
-          onChange={(e) => setSearchText(e.target.value)}
-          onFocus={() => setIsOpen(true)}
-          onBlur={() => setTimeout(() => setIsOpen(false), 200)}
-          className={inputClassName}
-        />
-        {isOpen && (
-          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
-            <button
-              onClick={() => {
-                onSelectCustomer(null);
-                setSearchText('');
-                setIsOpen(false);
-              }}
-              className="w-full text-left px-4 py-2 hover:bg-slate-50 border-b text-sm font-medium"
-            >
-              All Customers
-            </button>
-            {filteredCustomers.length > 0 ? (
-              filteredCustomers.map((c: any) => (
-                <button
-                  key={c.id}
-                  onClick={() => {
-                    onSelectCustomer(c);
-                    setSearchText('');
-                    setIsOpen(false);
-                  }}
-                  className="w-full text-left px-4 py-2 hover:bg-slate-50 border-b text-sm"
-                >
-                  {c.Customer} {c.SAPC_code ? `- ${c.SAPC_code}` : ''}
-                </button>
-              ))
-            ) : (
-              <div className="px-4 py-2 text-sm text-gray-500">No customers found</div>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export default function MyProduceDashboard() {
   const router = useRouter();
   const pathname = usePathname();
@@ -509,14 +419,9 @@ export default function MyProduceDashboard() {
   
   const [activeView, setActiveView] = useState<ViewState>('dashboard');
   const [selectedContractId, setSelectedContractId] = useState<string | null>(null);
-  const [selectedLoadingAdviceKeys, setSelectedLoadingAdviceKeys] = useState<string[]>([]);
   const [isCosModalOpen, setIsCosModalOpen] = useState(false);
   const [weekFilter, setWeekFilter] = useState<string>('all');
   const [customerFilter, setCustomerFilter] = useState<string>('all');
-  const [customerSearchText, setCustomerSearchText] = useState<string>('');
-  const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState<boolean>(false);
-  const [selectedCustomerObject, setSelectedCustomerObject] = useState<any>(null);
-  const [bookingFilter, setBookingFilter] = useState<string>('all');
   const [tripStatusFilter, setTripStatusFilter] = useState<'all' | 'shipped'>('all');
   const [selectedCuttingOrderKeys, setSelectedCuttingOrderKeys] = useState<string[]>([]);
   const [isBulkCuttingStatusModalOpen, setIsBulkCuttingStatusModalOpen] = useState(false);
@@ -560,73 +465,11 @@ export default function MyProduceDashboard() {
     photos: [],
   });
   const transferPhotoInputRef = useRef<HTMLInputElement | null>(null);
-  const pplaBookingAttachmentInputRef = useRef<HTMLInputElement | null>(null);
-  const pplaEditBookingAttachmentInputRef = useRef<HTMLInputElement | null>(null);
-  const configFileInputRef = useRef<HTMLInputElement | null>(null);
-  const [selectedConfigType, setSelectedConfigType] = useState<'customers' | 'pricing-condition' | 'incoterm' | 'customer-mapping' | 'pack-type' | 'vessels' | 'shipping-lines' | 'port-of-loading' | 'port-of-destination' | 'customer-to-packtype'>('pricing-condition');
-  const [isImportingConfig, setIsImportingConfig] = useState(false);
-  const [packTypes, setPackTypes] = useState<any[]>([]);
-  const [vessels, setVessels] = useState<any[]>([]);
-  const [shippingLines, setShippingLines] = useState<any[]>([]);
-  const [pricingConditions, setPricingConditions] = useState<any[]>([]);
-  const [portOfLoadings, setPortOfLoadings] = useState<any[]>([]);
-  const [portOfDestinations, setPortOfDestinations] = useState<any[]>([]);
-  const [materialPackTypes, setMaterialPackTypes] = useState<any[]>([]);
-  const [profitCenters, setProfitCenters] = useState<any[]>([]);
-  const [brandMappings, setBrandMappings] = useState<any[]>([]);
-  const [incotermData, setIncotermData] = useState<any[]>([]);
-  const [customerMappingData, setCustomerMappingData] = useState<any[]>([]);
-  const [customerToPackTypeData, setCustomerToPackTypeData] = useState<any[]>([]);
   const [expandedTripIds, setExpandedTripIds] = useState<string[]>([]);
   const [isShippingDocsModalOpen, setIsShippingDocsModalOpen] = useState(false);
   const [isShippingDocEditorOpen, setIsShippingDocEditorOpen] = useState(false);
   const [isShippingDocUploadOpen, setIsShippingDocUploadOpen] = useState(false);
   const [selectedTripForDocs, setSelectedTripForDocs] = useState<any>(null);
-  const [isPplaBookingsModalOpen, setIsPplaBookingsModalOpen] = useState(false);
-  const [pplaSubtab, setPplaSubtab] = useState<string>('loading-advice');
-  const [selectedPplaLAForAssignPS, setSelectedPplaLAForAssignPS] = useState<LoadingAdviceListRow | null>(null);
-  const [selectedPplaAssignPSRow, setSelectedPplaAssignPSRow] = useState<CuttingOrderListRow | null>(null);
-  const [pplaLoadingAdvicePage, setPplaLoadingAdvicePage] = useState(1);
-  const [pplaAssignPsPage, setPplaAssignPsPage] = useState(1);
-  const [pplaAllocationsPage, setPplaAllocationsPage] = useState(1);
-  const [selectedPplaLARowForBookings, setSelectedPplaLARowForBookings] = useState<LoadingAdviceListRow | null>(null);
-  const [pplaBookingModalTab, setPplaBookingModalTab] = useState<PplaBookingModalTab>('add-new');
-  const [isPplaAddBookingFormOpen, setIsPplaAddBookingFormOpen] = useState(false);
-  const [selectedPplaBookingForEdit, setSelectedPplaBookingForEdit] = useState<BookingListRow | null>(null);
-  const [pplaNewBookingDraft, setPplaNewBookingDraft] = useState({
-    bookingNumber: '',
-    shippingLine: '',
-    vesselName: '',
-    pod: '',
-    attachmentUrls: [] as string[],
-    containersConfirmed: 0,
-  });
-  const [pplaEditBookingDraft, setPplaEditBookingDraft] = useState({
-    bookingNumber: '',
-    shippingLine: '',
-    vesselName: '',
-    pod: '',
-    attachmentUrls: [] as string[],
-    containersConfirmed: 0,
-  });
-  const [pplaBookingAttachmentFiles, setPplaBookingAttachmentFiles] = useState<File[]>([]);
-  const [pplaEditBookingAttachmentFiles, setPplaEditBookingAttachmentFiles] = useState<File[]>([]);
-  const [selectedPplaExistingBookingKeys, setSelectedPplaExistingBookingKeys] = useState<string[]>([]);
-  const [isPplaContainerModalOpen, setIsPplaContainerModalOpen] = useState(false);
-  const [isComingSoonModalOpen, setIsComingSoonModalOpen] = useState(false);
-  const [selectedPplaAllocationRowForContainer, setSelectedPplaAllocationRowForContainer] = useState<CuttingOrderListRow | null>(null);
-  const [pplaContainerModalTab, setPplaContainerModalTab] = useState<PplaContainerModalTab>('add-new');
-  const [selectedPplaExistingContainerKey, setSelectedPplaExistingContainerKey] = useState<string>('');
-  const [pplaNewContainerDraft, setPplaNewContainerDraft] = useState({
-    containerNo: '',
-    vanNo: '',
-    sealNo: '',
-    atwStatus: 'Y' as 'Y' | 'N',
-    atwReleased: format(new Date(), 'yyyy-MM-dd'),
-    pmNo: '',
-    driverName: '',
-    dateWithdrawn: format(new Date(), 'yyyy-MM-dd'),
-  });
   const [selectedShippingDocType, setSelectedShippingDocType] = useState<ShippingDocType>('Shipping Instruction');
   const [selectedShippingDocUploadType, setSelectedShippingDocUploadType] = useState<string>('');
   const [selectedShippingDocFile, setSelectedShippingDocFile] = useState<File | null>(null);
@@ -669,8 +512,6 @@ export default function MyProduceDashboard() {
 
   const viewToPath = (view: ViewState) => {
     switch (view) {
-      case 'ppla':
-        return '/myproduce/ppla';
       case 'trips':
         return '/myproduce/trip';
       case 'bookings':
@@ -689,8 +530,6 @@ export default function MyProduceDashboard() {
   const pathToView = (path: string): ViewState => {
     const slug = path.split('/')[2] || '';
     switch (slug) {
-      case 'ppla':
-        return 'ppla';
       case 'trip':
       case 'trips':
         return 'trips';
@@ -719,58 +558,6 @@ export default function MyProduceDashboard() {
       setActiveView(nextView);
     }
   }, [pathname, activeView]);
-
-  // Load persisted config data from Firestore when user is authenticated
-  useEffect(() => {
-    if (!user) {
-      console.log('User not yet authenticated, skipping Firestore load');
-      return;
-    }
-
-    const loadPersistedConfig = async () => {
-      try {
-        console.log('Loading persisted config for user:', user.uid);
-        const persistedConfig = await loadConfigFromFirestore();
-        if (persistedConfig) {
-          // Restore all config data from Firestore
-          if (persistedConfig['pricing-condition']?.length > 0) {
-            setPricingConditions(persistedConfig['pricing-condition']);
-          }
-          if (persistedConfig['incoterm']?.length > 0) {
-            setIncotermData(persistedConfig['incoterm']);
-          }
-          if (persistedConfig['customer-mapping']?.length > 0) {
-            setCustomerMappingData(persistedConfig['customer-mapping']);
-          }
-          if (persistedConfig['pack-type']?.length > 0) {
-            setMaterialPackTypes(persistedConfig['pack-type']);
-          }
-          if (persistedConfig['shipping-lines']?.length > 0) {
-            setBrandMappings(persistedConfig['shipping-lines']);
-          }
-          if (persistedConfig['vessels']?.length > 0) {
-            setProfitCenters(persistedConfig['vessels']);
-          }
-          if (persistedConfig['port-of-loading']?.length > 0) {
-            setPortOfLoadings(persistedConfig['port-of-loading']);
-          }
-          if (persistedConfig['port-of-destination']?.length > 0) {
-            setPortOfDestinations(persistedConfig['port-of-destination']);
-          }
-          if (persistedConfig['customer-to-packtype']?.length > 0) {
-            setCustomerToPackTypeData(persistedConfig['customer-to-packtype']);
-          }
-          console.log('Persisted config data restored from Firestore:', persistedConfig);
-        } else {
-          console.log('No persisted config found in Firestore');
-        }
-      } catch (error) {
-        console.error('Error loading persisted config:', error);
-      }
-    };
-
-    loadPersistedConfig();
-  }, [user]);
 
   // Loading Advice State
   const [isExtracting, setIsExtracting] = useState(false);
@@ -819,10 +606,10 @@ export default function MyProduceDashboard() {
   });
   const [bookingRows, setBookingRows] = useState<BookingRowItem[]>([createEmptyBookingRow()]);
   const [isFinalizingLoadingAdvice, setIsFinalizingLoadingAdvice] = useState(false);
-  const createEmptyCOSRow = (ps = '1', pod = '', shippingLine = ''): COSRow => ({
+  const createEmptyCOSRow = (ps = '1', pod = ''): COSRow => ({
     id: Math.random().toString(36).substr(2, 9),
     ps,
-    shippingLine,
+    shippingLine: '',
     bookingNumber: '',
     containerNo: '',
     atwStatus: 'PENDING',
@@ -839,7 +626,6 @@ export default function MyProduceDashboard() {
     customerName: '',
     weekNumber: '',
     pod: '',
-    shippingLine: '',
     laId: '',
   });
 
@@ -1031,35 +817,6 @@ export default function MyProduceDashboard() {
     return query(collection(db, CUSTOMER_PATH), orderBy('Customer', 'asc'));
   }, [db]);
   
-  // Derive customerMappings from imported Excel data (customerMappingData) with fallback to Firestore
-  const customerMappings = useMemo(() => {
-    // Prioritize imported Excel data if available
-    if (customerMappingData && customerMappingData.length > 0) {
-      console.log('Using imported customer mapping data');
-      const mapped = customerMappingData.map((item: any, index: number) => ({
-        id: item.CUSTOMERID || item.id || String(index),
-        Customer: item.CUSTOMER || item.Customer || item['Customer Name'] || '',
-        ...item, // Include all other columns for reference
-      }));
-      // Sort alphabetically by Customer name
-      return mapped.sort((a: any, b: any) => (a.Customer || '').localeCompare((b.Customer || '')));
-    }
-    
-    // Fallback to Firestore query if no imported data
-    console.log('No imported customer data, using Firestore');
-    return [];
-  }, [customerMappingData]);
-
-  // Filter customers based on search text
-  const filteredCustomers = useMemo(() => {
-    if (!customerSearchText.trim()) return customerMappings;
-    const searchLower = customerSearchText.toLowerCase();
-    return customerMappings.filter((c: any) =>
-      (c.Customer || '').toLowerCase().includes(searchLower) ||
-      (c.SAPC_code || '').toLowerCase().includes(searchLower)
-    );
-  }, [customerMappings, customerSearchText]);
-  
   const podMappingsQuery = useMemoFirebase(() => {
     if (!db) return null;
     return query(collection(db, POD_PATH), orderBy('portName', 'asc'));
@@ -1085,6 +842,7 @@ export default function MyProduceDashboard() {
     return query(collection(db, TRIP_PATH), orderBy('updatedAt', 'desc'));
   }, [db]);
 
+  const { data: customerMappings } = useCollection(customerMappingsQuery);
   const { data: podMappings } = useCollection(podMappingsQuery);
   const { data: polMappings } = useCollection(polMappingsQuery);
   const { data: contracts, loading: contractsLoading } = useCollection(contractsQuery);
@@ -1093,33 +851,7 @@ export default function MyProduceDashboard() {
 
   const weekOptions = useMemo(() => {
     const options = [];
-    const currentYear = new Date().getFullYear();
-    
-    // Find the Sunday of the week containing Jan 1 (ISO week calculation)
-    let weekStart = new Date(currentYear, 0, 1);
-    const jan1DayOfWeek = weekStart.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-    
-    // If Jan 1 is Fri/Sat/Sun of a week without the first Thursday, move to next Monday
-    // Otherwise, go back to the Sunday of the week containing Jan 1
-    if (jan1DayOfWeek >= 5 || (jan1DayOfWeek === 0 && new Date(currentYear, 0, 4).getDay() > 4)) {
-      // Move to next Monday
-      weekStart.setDate(weekStart.getDate() + (8 - jan1DayOfWeek));
-    } else {
-      // Go back to Sunday of this week
-      weekStart.setDate(weekStart.getDate() - jan1DayOfWeek);
-    }
-    
-    for (let i = 1; i <= 52; i++) {
-      const currentWeekStart = new Date(weekStart);
-      currentWeekStart.setDate(weekStart.getDate() + (i - 1) * 7);
-      const currentWeekEnd = new Date(currentWeekStart);
-      currentWeekEnd.setDate(currentWeekEnd.getDate() + 6);
-      
-      const startMonth = currentWeekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      const endMonth = currentWeekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      const label = `${i} (${startMonth} - ${endMonth})`;
-      options.push({ value: i.toString(), label });
-    }
+    for (let i = 1; i <= 52; i++) options.push(i.toString());
     return options;
   }, []);
 
@@ -1158,11 +890,10 @@ export default function MyProduceDashboard() {
           }];
 
       contractItems.forEach((item: any, index: number) => {
-        const rowId = `${contract.id}-${index}`;
         rows.push({
-          id: rowId,
+          id: item.itemId || `${contract.id}-${index}`,
           contractId: contract.id,
-          itemId: item.itemId || rowId,
+          itemId: item.itemId || `${contract.id}-${index}`,
           weekNumber: String(contract.weekNumber || '--'),
           customerName: contract.customerName || '--',
           workflowStage: normalizeLoadingAdviceWorkflowStage(contract.workflowStage),
@@ -1173,13 +904,8 @@ export default function MyProduceDashboard() {
           cutOffDate: formatDisplayDate(item.cutOffDate || contract.cutOffDate),
           etd: formatDisplayDate(item.etd || contract.etd),
           totalVans: String(item.totalVans ?? contract.totalVans ?? '--'),
-          sku: item.sku !== undefined && item.sku !== null && item.sku !== ''
-            ? item.sku
-            : Array.isArray(contract.selectedSKUs) && contract.selectedSKUs.length > 0
-              ? contract.selectedSKUs[0]
-              : contract.sku || '--',
+          sku: item.sku || Array.isArray(contract.selectedSKUs) && contract.selectedSKUs.length > 0 ? contract.selectedSKUs[0] : '--',
           palletization: item.palletization || contract.palletizedType || '--',
-          bookingStatus: contract.bookingStatus || 'Empty',
         });
       });
     });
@@ -1216,7 +942,6 @@ export default function MyProduceDashboard() {
           customerName: contract.customerName || '--',
           weekNumber: String(contract.weekNumber || '--'),
           ps: String(item.ps || index + 1),
-          taskDate: item.taskDate || '',
           shippingLine: item.shippingLine || contract.shippingLine || '--',
           bookingNo: item.bookingNo || contract.bookingNo || '--',
           containerNo: item.containerNo || '--',
@@ -1225,11 +950,7 @@ export default function MyProduceDashboard() {
           pod: item.pod || contract.pod || '--',
           cutOffDate: formatDisplayDate(item.cutOffDate || contract.cutOffDate),
           etd: formatDisplayDate(item.etd || contract.etd),
-          sku: item.sku !== undefined && item.sku !== null && item.sku !== ''
-            ? item.sku
-            : Array.isArray(contract.selectedSKUs) && contract.selectedSKUs.length > 0
-              ? contract.selectedSKUs[0]
-              : contract.sku || '--',
+          sku: item.sku || contract.sku || '--',
           palletization: item.palletization || contract.palletizedType || '--',
         });
       });
@@ -1250,14 +971,6 @@ export default function MyProduceDashboard() {
     return cuttingOrderRows.reduce((acc, row: any) => acc + (Number(row.totalVans ?? row.qty ?? 0) || 0), 0);
   }, [cuttingOrderRows]);
 
-  const filteredLoadingAdviceRows = useMemo(() => {
-    return loadingAdviceRows.filter((row) => {
-      const matchesWeek = weekFilter === 'all' || row.weekNumber === weekFilter;
-      const matchesCustomer = customerFilter === 'all' || row.customerName === customerFilter;
-      return matchesWeek && matchesCustomer;
-    });
-  }, [loadingAdviceRows, weekFilter, customerFilter]);
-
   const filteredCuttingOrderRows = useMemo(() => {
     return cuttingOrderRows.filter((row) => {
       const matchesWeek = weekFilter === 'all' || row.weekNumber === weekFilter;
@@ -1265,51 +978,6 @@ export default function MyProduceDashboard() {
       return matchesWeek && matchesCustomer;
     });
   }, [cuttingOrderRows, weekFilter, customerFilter]);
-
-  const pplaAssignPsRows = useMemo(() => {
-    return selectedPplaLAForAssignPS
-      ? filteredCuttingOrderRows.filter((row) => row.contractId === selectedPplaLAForAssignPS.contractId)
-      : filteredCuttingOrderRows;
-  }, [filteredCuttingOrderRows, selectedPplaLAForAssignPS]);
-
-  const pplaAllocationRows = useMemo(() => {
-    return selectedPplaAssignPSRow
-      ? filteredCuttingOrderRows.filter(
-          (row) => row.contractId === selectedPplaAssignPSRow.contractId && row.id === selectedPplaAssignPSRow.id
-        )
-      : filteredCuttingOrderRows;
-  }, [filteredCuttingOrderRows, selectedPplaAssignPSRow]);
-
-  const pplaLoadingAdviceTotalPages = Math.max(1, Math.ceil(filteredLoadingAdviceRows.length / PPLA_PAGE_SIZE));
-  const pplaAssignPsTotalPages = Math.max(1, Math.ceil(pplaAssignPsRows.length / PPLA_PAGE_SIZE));
-  const pplaAllocationsTotalPages = Math.max(1, Math.ceil(pplaAllocationRows.length / PPLA_PAGE_SIZE));
-
-  const pplaLoadingAdvicePageRows = useMemo(() => {
-    const start = (pplaLoadingAdvicePage - 1) * PPLA_PAGE_SIZE;
-    return filteredLoadingAdviceRows.slice(start, start + PPLA_PAGE_SIZE);
-  }, [filteredLoadingAdviceRows, pplaLoadingAdvicePage]);
-
-  const pplaAssignPsPageRows = useMemo(() => {
-    const start = (pplaAssignPsPage - 1) * PPLA_PAGE_SIZE;
-    return pplaAssignPsRows.slice(start, start + PPLA_PAGE_SIZE);
-  }, [pplaAssignPsRows, pplaAssignPsPage]);
-
-  const pplaAllocationPageRows = useMemo(() => {
-    const start = (pplaAllocationsPage - 1) * PPLA_PAGE_SIZE;
-    return pplaAllocationRows.slice(start, start + PPLA_PAGE_SIZE);
-  }, [pplaAllocationRows, pplaAllocationsPage]);
-
-  useEffect(() => {
-    setPplaLoadingAdvicePage((prev) => Math.min(prev, pplaLoadingAdviceTotalPages));
-  }, [pplaLoadingAdviceTotalPages]);
-
-  useEffect(() => {
-    setPplaAssignPsPage((prev) => Math.min(prev, pplaAssignPsTotalPages));
-  }, [pplaAssignPsTotalPages]);
-
-  useEffect(() => {
-    setPplaAllocationsPage((prev) => Math.min(prev, pplaAllocationsTotalPages));
-  }, [pplaAllocationsTotalPages]);
 
   const cuttingOrderRowKey = (row: CuttingOrderListRow) => `${row.contractId}:${row.id}`;
 
@@ -1358,12 +1026,10 @@ export default function MyProduceDashboard() {
           id: row.bookingId || row.id || `${batch.id}-${index}`,
           batchId: batch.id,
           laId: row.laId || batch.laId || '',
-          bookingNumber: row.bookingNumber || '',
+          bookingNumber: row.bookingNumber || '--',
           shippingLine: row.shippingLine || batch.shippingLine || '--',
           vesselName: row.vesselName || batch.vesselName || '--',
           pod: row.pod || batch.pod || '--',
-          attachmentUrls: row.attachmentUrls || batch.attachmentUrls || [],
-          containersConfirmed: Number(row.containersConfirmed ?? batch.containersConfirmed ?? 0) || 0,
           customerName: batch.customerName || '--',
           weekNumber: String(batch.weekNumber || '--'),
         });
@@ -1383,24 +1049,6 @@ export default function MyProduceDashboard() {
     return Array.from(uniqueNumbers).sort((a, b) => a.localeCompare(b));
   }, [bookingListRows]);
 
-  const laLBoundBookingNumbers = useMemo(() => {
-    if (!selectedPplaAssignPSRow) return [];
-    // Filter bookings that belong to the same LA contract as the selected CO
-    // LA rows have laId format: ${contractId}-${index}, so check if laId starts with contractId
-    const uniqueNumbers = new Set<string>();
-    bookingListRows.forEach((row) => {
-      if (
-        row.bookingNumber &&
-        row.bookingNumber !== '--' &&
-        row.laId &&
-        row.laId.startsWith(selectedPplaAssignPSRow.contractId)
-      ) {
-        uniqueNumbers.add(row.bookingNumber);
-      }
-    });
-    return Array.from(uniqueNumbers).sort((a, b) => a.localeCompare(b));
-  }, [bookingListRows, selectedPplaAssignPSRow]);
-
   const filteredBookingRows = useMemo(() => {
     return bookingListRows.filter((row) => {
       const matchesWeek = weekFilter === 'all' || row.weekNumber === weekFilter;
@@ -1409,90 +1057,15 @@ export default function MyProduceDashboard() {
     });
   }, [bookingListRows, weekFilter, customerFilter]);
 
-  const bookingNumberFilterOptions = useMemo(() => {
-    const uniqueNumbers = new Set<string>();
-    filteredBookingRows.forEach((row) => {
-      if (row.bookingNumber && row.bookingNumber !== '--') {
-        uniqueNumbers.add(row.bookingNumber);
-      }
-    });
-    return Array.from(uniqueNumbers).sort((a, b) => a.localeCompare(b));
-  }, [filteredBookingRows]);
-
-  const bookedVansByContractId = useMemo(() => {
-    const counts: Record<string, number> = {};
-    (bookingListRows || []).forEach((row) => {
-      const laId = String(row.laId || '').trim();
-      if (!laId) return;
-      counts[laId] = (counts[laId] || 0) + (Number(row.containersConfirmed || 0) || 0);
-    });
-    return counts;
-  }, [bookingListRows]);
-
-  const pplaAssociatedBookings = useMemo(() => {
-    if (!selectedPplaLARowForBookings) return [];
-    return bookingListRows.filter((row) => row.laId === selectedPplaLARowForBookings.id);
-  }, [bookingListRows, selectedPplaLARowForBookings]);
-
-  const pplaExistingBookingKey = (row: BookingListRow) => `${row.batchId}:${row.id}`;
-
-  const pplaExistingBookingsToBind = useMemo(() => {
-    if (!selectedPplaLARowForBookings) return [];
-    return bookingListRows.filter((row) => row.laId !== selectedPplaLARowForBookings.id);
-  }, [bookingListRows, selectedPplaLARowForBookings]);
-
-  const pplaContainerRegistryRows = useMemo(() => {
-    return (trips || [])
-      .filter((trip: any) => Boolean(trip?.containerNo))
-      .map((trip: any) => ({
-        id: trip.id,
-        containerNo: String(trip.containerNo || ''),
-        vanNo: String(trip.vanNo || ''),
-        sealNo: String(trip.sealNo || ''),
-        atwStatus: String(trip.atwStatus || 'Y'),
-        atwReleased: String(trip.dateAtwReleased || ''),
-        pmNo: String(trip.pmNo || ''),
-        driverName: String(trip.driver || ''),
-        dateWithdrawn: String(trip.dateWithdrawn || ''),
-      }));
-  }, [trips]);
-
-  const pplaCurrentBoundContainer = useMemo(() => {
-    if (!selectedPplaAllocationRowForContainer) return null;
-    const match = pplaContainerRegistryRows.find((row) => row.containerNo === selectedPplaAllocationRowForContainer.containerNo);
-    if (match) return match;
-    if (selectedPplaAllocationRowForContainer.containerNo && selectedPplaAllocationRowForContainer.containerNo !== '--') {
-      return {
-        id: `manual-${selectedPplaAllocationRowForContainer.id}`,
-        containerNo: selectedPplaAllocationRowForContainer.containerNo,
-        vanNo: '--',
-        sealNo: '--',
-        atwStatus: '--',
-        atwReleased: '--',
-        pmNo: '--',
-        driverName: '--',
-        dateWithdrawn: '--',
-      };
-    }
-    return null;
-  }, [pplaContainerRegistryRows, selectedPplaAllocationRowForContainer]);
-
-  useEffect(() => {
-    if (bookingFilter !== 'all' && !bookingNumberFilterOptions.includes(bookingFilter)) {
-      setBookingFilter('all');
-    }
-  }, [bookingFilter, bookingNumberFilterOptions]);
-
   const bookingShippingLineOptions = useMemo(() => {
-    const options = [
-      ...(bookings || [])
-        .flatMap((batch: any) => [batch.shippingLine, ...(Array.isArray(batch.items) ? batch.items.map((item: any) => item.shippingLine) : [])])
-        .filter(Boolean),
-      cosHeader.shippingLine,
-    ];
-
-    return Array.from(new Set(options.filter(Boolean))) as string[];
-  }, [bookings, cosHeader.shippingLine]);
+    return Array.from(
+      new Set(
+        (bookings || [])
+          .flatMap((batch: any) => [batch.shippingLine, ...(Array.isArray(batch.items) ? batch.items.map((item: any) => item.shippingLine) : [])])
+          .filter(Boolean)
+      )
+    ) as string[];
+  }, [bookings]);
 
   const bookingVesselOptions = useMemo(() => {
     return Array.from(
@@ -1519,19 +1092,20 @@ export default function MyProduceDashboard() {
     ) as string[];
   }, [trips]);
 
+  const filteredLoadingAdviceRows = useMemo(() => {
+    return loadingAdviceRows.filter((row) => {
+      const matchesWeek = weekFilter === 'all' || row.weekNumber === weekFilter;
+      const matchesCustomer = customerFilter === 'all' || row.customerName === customerFilter;
+      return matchesWeek && matchesCustomer;
+    });
+  }, [loadingAdviceRows, weekFilter, customerFilter]);
+
   const readyLoadingAdviceOptions = useMemo(() => {
     return (contracts || []).filter((contract: any) => {
       const stage = normalizeLoadingAdviceWorkflowStage(contract.workflowStage);
       return stage === 'READY_FOR_BOOKING' || stage === 'BOOKINGS_CREATED';
     });
   }, [contracts]);
-
-  const selectedLoadingAdviceRows = useMemo(() => {
-    return filteredLoadingAdviceRows.filter((row) => selectedLoadingAdviceKeys.includes(row.id));
-  }, [filteredLoadingAdviceRows, selectedLoadingAdviceKeys]);
-
-  const allFilteredLoadingAdviceSelected = filteredLoadingAdviceRows.length > 0 && selectedLoadingAdviceRows.length === filteredLoadingAdviceRows.length;
-  const someFilteredLoadingAdviceSelected = selectedLoadingAdviceRows.length > 0 && selectedLoadingAdviceRows.length < filteredLoadingAdviceRows.length;
 
   const readyForBookingLoadingAdviceRows = useMemo(() => {
     return (contracts || [])
@@ -1568,11 +1142,9 @@ export default function MyProduceDashboard() {
       const matchesStatus =
         tripStatusFilter === 'all' ||
         (tripStatusFilter === 'shipped' && (tripStatus === 'DEPART' || tripStatus === 'SHIPPED'));
-      const bookingNumber = String(trip?.bookingNo || trip?.bookingNumber || '').trim();
-      const matchesBooking = bookingFilter === 'all' || bookingNumber === bookingFilter;
-      return matchesStatus && matchesBooking;
+      return matchesStatus;
     });
-  }, [trips, tripStatusFilter, bookingFilter]);
+  }, [trips, tripStatusFilter]);
 
   useEffect(() => {
     setVlsSavedTripIds(
@@ -1639,23 +1211,13 @@ export default function MyProduceDashboard() {
       return;
     }
 
-    const hasExistingCuttingOrders = Array.isArray(resolvedContract.cuttingOrders) && resolvedContract.cuttingOrders.length > 0;
-    const savedRows = hasExistingCuttingOrders
+    const savedRows = Array.isArray(resolvedContract.cuttingOrders) && resolvedContract.cuttingOrders.length > 0
       ? resolvedContract.cuttingOrders
       : Array.isArray(resolvedContract.items) && resolvedContract.items.length > 0
         ? resolvedContract.items
         : [];
-    const expandedRows = hasExistingCuttingOrders
-      ? savedRows
-      : savedRows.flatMap((item: any) => {
-          const repeatCount = Math.max(Number(item.totalVans || item.qty || 0) || 1, 1);
-          return Array.from({ length: repeatCount }, (_, duplicateIndex) => ({
-            ...item,
-            duplicateIndex,
-          }));
-        });
-    const totalRows = Math.max(expandedRows.length || 1, Number(resolvedContract.totalVans || 0) || 1);
-    const sourceRows = Array.from({ length: totalRows }, (_, index) => expandedRows[index] || null);
+    const totalRows = Math.max(Number(resolvedContract.totalVans || 0) || savedRows.length || 1, savedRows.length || 1);
+    const sourceRows = Array.from({ length: totalRows }, (_, index) => savedRows[index] || null);
     const sourcePod =
       resolvedContract.pod ||
       sourceRows.find((row: any) => row?.pod)?.pod ||
@@ -1664,18 +1226,13 @@ export default function MyProduceDashboard() {
       customerName: resolvedContract.customerName || '',
       weekNumber: String(resolvedContract.weekNumber || ''),
       pod: sourcePod,
-      shippingLine: resolvedContract.shippingLine || '',
       laId: resolvedContract.contractId || resolvedContract.id,
     });
     setCosRows(
       sourceRows.map((row: any, index: number) =>
         row
           ? {
-              id: hasExistingCuttingOrders
-                ? row.id || row.itemId || Math.random().toString(36).substr(2, 9)
-                : (row.itemId || row.id)
-                  ? `${row.itemId || row.id}-${row.duplicateIndex ?? 0}`
-                  : Math.random().toString(36).substr(2, 9),
+              id: row.id || row.itemId || Math.random().toString(36).substr(2, 9),
               ps: String(row.ps || index + 1),
               shippingLine: row.shippingLine || resolvedContract.shippingLine || '',
               bookingNumber: row.bookingNumber || '',
@@ -1684,14 +1241,10 @@ export default function MyProduceDashboard() {
               pod: row.pod || sourcePod || '',
               cutOffDate: row.cutOffDate || resolvedContract.cutOffDate || '',
               etd: row.etd || resolvedContract.etd || '',
-              sku: row.sku !== undefined && row.sku !== null && row.sku !== ''
-                ? row.sku
-                : Array.isArray(resolvedContract.selectedSKUs) && resolvedContract.selectedSKUs.length > 0
-                  ? resolvedContract.selectedSKUs[0]
-                  : '',
+              sku: row.sku || (Array.isArray(resolvedContract.selectedSKUs) ? resolvedContract.selectedSKUs[0] : '') || '',
               palletization: row.palletization || resolvedContract.palletizedType || 'Palletized',
             }
-          : createEmptyCOSRow(String(index + 1), sourcePod, resolvedContract.shippingLine || '')
+          : createEmptyCOSRow(String(index + 1), sourcePod)
       )
     );
     setIsCosModalOpen(true);
@@ -1800,56 +1353,6 @@ export default function MyProduceDashboard() {
     }
   };
 
-  const handleFinalizeSelectedLoadingAdviceForBooking = async () => {
-    if (!db) return;
-    const selectedContractIds = Array.from(new Set(selectedLoadingAdviceRows.map((row) => row.contractId)));
-    if (selectedContractIds.length < 2) {
-      toast({
-        variant: 'destructive',
-        title: 'Select multiple LAs',
-        description: 'Please select two or more loading advice records before marking ready for booking.',
-      });
-      return;
-    }
-
-    const invalidSelection = selectedContractIds.filter((contractId) => {
-      const contract = (contracts || []).find((contract: any) => contract.id === contractId);
-      return !contract || !Array.isArray(contract.cuttingOrders) || contract.cuttingOrders.length === 0;
-    });
-
-    if (invalidSelection.length > 0) {
-      toast({
-        variant: 'destructive',
-        title: 'Cannot finalize selected LAs',
-        description: 'One or more selected LAs do not have cutting orders.',
-      });
-      return;
-    }
-
-    try {
-      setIsFinalizingLoadingAdvice(true);
-      const batch = writeBatch(db);
-      selectedContractIds.forEach((contractId) => {
-        batch.update(doc(db, CONTRACT_PATH, contractId), {
-          workflowStage: 'READY_FOR_BOOKING',
-          status: 'active',
-          cuttingOrdersFinalizedAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-      });
-      await batch.commit();
-      toast({
-        title: 'Loading Advice Finalized',
-        description: 'Selected loading advice records are now ready for booking.',
-      });
-      setSelectedLoadingAdviceKeys([]);
-    } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Finalize Failed', description: err.message });
-    } finally {
-      setIsFinalizingLoadingAdvice(false);
-    }
-  };
-
   const handleSignOut = async () => {
     if (auth) {
       await signOut(auth);
@@ -1923,37 +1426,11 @@ export default function MyProduceDashboard() {
         palletization: row.palletization || '',
       }));
       const totalVans = normalizedRows.reduce((acc, row) => acc + row.totalVans, 0);
-      const generatedCuttingOrders = normalizedRows.flatMap((row, rowIndex) => {
-        // Calculate cutoff date as 1 day before ETD if ETD is provided
-        let calculatedCutoffDate = '';
-        if (row.etd) {
-          const etdDate = new Date(row.etd);
-          const cutoffDate = new Date(etdDate);
-          cutoffDate.setDate(cutoffDate.getDate() - 1);
-          calculatedCutoffDate = cutoffDate.toISOString().split('T')[0];
-        }
-        
-        return Array.from({ length: Math.max(0, Number(row.totalVans || 0)) }, (_, vanIndex) => ({
-          itemId: `${contractId}-co-${rowIndex + 1}-${vanIndex + 1}`,
-          ps: String(vanIndex + 1),
-          shippingLine: row.shippingLine || '',
-          bookingNo: '',
-          containerNo: '',
-          atwStatus: 'EMPTY',
-          status: 'EMPTY',
-          pod: row.pod || '',
-          cutOffDate: calculatedCutoffDate,
-          etd: row.etd || '',
-          sku: row.sku || '',
-          palletization: row.palletization || '',
-        }));
-      });
 
       await setDoc(doc(db, CONTRACT_PATH, contractId), {
         contractId,
         ...newLAHeader,
         status: 'pending',
-        bookingStatus: 'Empty',
         workflowStage: 'LA_CREATED',
         receivedAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -1967,24 +1444,15 @@ export default function MyProduceDashboard() {
         etd: normalizedRows[0]?.etd || '',
         palletizedType: normalizedRows[0]?.palletization || '',
         selectedSKUs: normalizedRows.filter(row => row.sku).map(row => row.sku),
-        cuttingOrders: generatedCuttingOrders,
-        cuttingOrderTotal: generatedCuttingOrders.length,
-        cuttingOrdersUpdatedAt: serverTimestamp(),
         items: normalizedRows,
       });
 
       const existingItems = await getDocs(collection(db, `${CONTRACT_PATH}/${contractId}/items`));
-      const existingCuttingOrders = await getDocs(collection(db, `${CONTRACT_PATH}/${contractId}/cutting_orders`));
       const batch = writeBatch(db);
       existingItems.docs.forEach((snapshot) => batch.delete(snapshot.ref));
-      existingCuttingOrders.docs.forEach((snapshot) => batch.delete(snapshot.ref));
       normalizedRows.forEach((row) => {
         const itemRef = doc(collection(db, `${CONTRACT_PATH}/${contractId}/items`));
         batch.set(itemRef, { ...row, itemId: itemRef.id, updatedAt: serverTimestamp() });
-      });
-      generatedCuttingOrders.forEach((row) => {
-        const rowRef = doc(collection(db, `${CONTRACT_PATH}/${contractId}/cutting_orders`));
-        batch.set(rowRef, { ...row, itemId: rowRef.id, updatedAt: serverTimestamp() });
       });
       await batch.commit();
 
@@ -2067,499 +1535,6 @@ export default function MyProduceDashboard() {
     }
   };
 
-  const handleCreatePplaBooking = async () => {
-    if (!db || !selectedPplaLARowForBookings) return;
-    if (!pplaNewBookingDraft.shippingLine || !pplaNewBookingDraft.vesselName || !pplaNewBookingDraft.pod) {
-      toast({
-        variant: 'destructive',
-        title: 'Validation Error',
-        description: 'Shipping Line, Vessel, and POD are required. Booking No is optional and can be added later.',
-      });
-      return;
-    }
-
-    try {
-      // Convert files to DataURLs
-      const attachmentUrls: string[] = [];
-      if (pplaBookingAttachmentFiles && pplaBookingAttachmentFiles.length > 0) {
-        for (const file of pplaBookingAttachmentFiles) {
-          const dataUrl = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = (e) => resolve(e.target?.result as string);
-            reader.readAsDataURL(file);
-          });
-          attachmentUrls.push(dataUrl);
-        }
-      }
-
-      const batchId = `BOOK-${Date.now()}`;
-      const bookingItem = {
-        bookingId: `${batchId}-1`,
-        laId: selectedPplaLARowForBookings.id,
-        bookingNumber: pplaNewBookingDraft.bookingNumber || '',
-        shippingLine: pplaNewBookingDraft.shippingLine,
-        vesselName: pplaNewBookingDraft.vesselName,
-        pod: pplaNewBookingDraft.pod,
-        attachmentUrls: attachmentUrls.slice(0, 2),
-        containersConfirmed: Number(pplaNewBookingDraft.containersConfirmed || 0) || 0,
-        bookingStatus: 'Booking Created' as BookingStatus,
-      };
-
-      await setDoc(doc(db, BOOKING_PATH, batchId), {
-        batchId,
-        laId: selectedPplaLARowForBookings.id,
-        customerName: selectedPplaLARowForBookings.customerName,
-        weekNumber: selectedPplaLARowForBookings.weekNumber,
-        workflowStage: 'BOOKINGS_CREATED',
-        totalBookings: 1,
-        bookingNumber: bookingItem.bookingNumber,
-        bookingNumbers: bookingItem.bookingNumber ? [bookingItem.bookingNumber] : [],
-        shippingLine: bookingItem.shippingLine,
-        vesselName: bookingItem.vesselName,
-        pod: bookingItem.pod,
-        attachmentUrls: bookingItem.attachmentUrls || [],
-        containersConfirmed: bookingItem.containersConfirmed,
-        bookingStatus: 'Booking Created',
-        items: [bookingItem],
-        receivedAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-
-      const rowDocId = bookingItem.bookingId;
-      const rowDocRef = doc(db, BOOKING_PATH, batchId, 'rows', rowDocId);
-      await setDoc(rowDocRef, {
-        ...bookingItem,
-        updatedAt: serverTimestamp(),
-      });
-
-      // Update contract bookingStatus and COs atwStatus
-      const contractRef = doc(db, CONTRACT_PATH, selectedPplaLARowForBookings.contractId);
-      await updateDoc(contractRef, {
-        bookingStatus: 'Booking Created',
-        updatedAt: serverTimestamp(),
-      });
-
-      // Update all COs for this LA to PENDING status
-      const cosToUpdate = cuttingOrderRows.filter(
-        (co: any) => co.contractId === selectedPplaLARowForBookings.contractId && co.status === 'EMPTY'
-      );
-
-      if (cosToUpdate.length > 0) {
-        // Get the contract to update its cuttingOrders array
-        const contractSnapshot = await getDoc(contractRef);
-        if (contractSnapshot.exists()) {
-          const contract = contractSnapshot.data();
-          const updatedCuttingOrders = (contract.cuttingOrders || []).map((co: any) => {
-            const isCOToUpdate = cosToUpdate.some((updateCo: any) => updateCo.id === (co.itemId || co.id));
-            if (isCOToUpdate) {
-              return {
-                ...co,
-                status: 'PENDING',
-                atwStatus: 'PENDING',
-              };
-            }
-            return co;
-          });
-
-          await updateDoc(contractRef, {
-            cuttingOrders: updatedCuttingOrders,
-            updatedAt: serverTimestamp(),
-          });
-        }
-      }
-
-      toast({ title: 'Booking Added', description: 'New booking was created and bound to this loading advice.' });
-      setPplaNewBookingDraft({
-        bookingNumber: '',
-        shippingLine: '',
-        vesselName: '',
-        pod: '',
-        attachmentUrls: [],
-        containersConfirmed: 0,
-      });
-      setPplaBookingAttachmentFiles([]);
-      if (pplaBookingAttachmentInputRef.current) {
-        pplaBookingAttachmentInputRef.current.value = '';
-      }
-      setIsPplaAddBookingFormOpen(false);
-    } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Error Creating Booking', description: err.message });
-    }
-  };
-
-  const handleEditPplaBooking = async () => {
-    if (!db || !selectedPplaBookingForEdit || !selectedPplaLARowForBookings) return;
-    if (!pplaEditBookingDraft.shippingLine || !pplaEditBookingDraft.vesselName || !pplaEditBookingDraft.pod) {
-      toast({
-        variant: 'destructive',
-        title: 'Validation Error',
-        description: 'Shipping Line, Vessel, and POD are required.',
-      });
-      return;
-    }
-
-    try {
-      // Convert new files to DataURLs
-      const newAttachmentUrls: string[] = [];
-      if (pplaEditBookingAttachmentFiles && pplaEditBookingAttachmentFiles.length > 0) {
-        for (const file of pplaEditBookingAttachmentFiles) {
-          const dataUrl = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = (e) => resolve(e.target?.result as string);
-            reader.readAsDataURL(file);
-          });
-          newAttachmentUrls.push(dataUrl);
-        }
-      }
-
-      // Merge existing and new attachments (max 2)
-      const mergedAttachments = [...(pplaEditBookingDraft.attachmentUrls || []), ...newAttachmentUrls].slice(0, 2);
-
-      const hadBookingNumber = Boolean(selectedPplaBookingForEdit.bookingNumber);
-      const hasBookingNumber = Boolean(pplaEditBookingDraft.bookingNumber);
-      const newBookingNumberEntered = !hadBookingNumber && hasBookingNumber;
-
-      // Update the booking document
-      const bookingRef = doc(db, BOOKING_PATH, selectedPplaBookingForEdit.batchId);
-      const bookingRowRef = doc(db, BOOKING_PATH, selectedPplaBookingForEdit.batchId, 'rows', selectedPplaBookingForEdit.id);
-
-      const newBookingStatus: BookingStatus = newBookingNumberEntered ? 'Booking Confirmed' : selectedPplaBookingForEdit.bookingStatus || 'Booking Created';
-
-      // Get current batch to update its items array
-      const batchSnapshot = await getDoc(bookingRef);
-      if (!batchSnapshot.exists()) return;
-      const batch = batchSnapshot.data();
-      const updatedItems = (batch.items || []).map((item: any) => ({
-        ...item,
-        bookingNumber: pplaEditBookingDraft.bookingNumber || item.bookingNumber,
-        shippingLine: pplaEditBookingDraft.shippingLine || item.shippingLine,
-        vesselName: pplaEditBookingDraft.vesselName || item.vesselName,
-        pod: pplaEditBookingDraft.pod || item.pod,
-        attachmentUrls: mergedAttachments,
-        containersConfirmed: Number(pplaEditBookingDraft.containersConfirmed || item.containersConfirmed || 0),
-        bookingStatus: newBookingStatus,
-      }));
-
-      // Update batch document with updated items array
-      await updateDoc(bookingRef, {
-        bookingNumber: pplaEditBookingDraft.bookingNumber || selectedPplaBookingForEdit.bookingNumber,
-        bookingNumbers: Array.from(new Set([pplaEditBookingDraft.bookingNumber || selectedPplaBookingForEdit.bookingNumber].filter(Boolean))),
-        shippingLine: pplaEditBookingDraft.shippingLine,
-        vesselName: pplaEditBookingDraft.vesselName,
-        pod: pplaEditBookingDraft.pod,
-        attachmentUrls: mergedAttachments,
-        containersConfirmed: Number(pplaEditBookingDraft.containersConfirmed || 0),
-        bookingStatus: newBookingStatus,
-        items: updatedItems,
-        updatedAt: serverTimestamp(),
-      });
-
-      await updateDoc(bookingRowRef, {
-        bookingNumber: pplaEditBookingDraft.bookingNumber || selectedPplaBookingForEdit.bookingNumber,
-        shippingLine: pplaEditBookingDraft.shippingLine,
-        vesselName: pplaEditBookingDraft.vesselName,
-        pod: pplaEditBookingDraft.pod,
-        attachmentUrls: mergedAttachments,
-        containersConfirmed: Number(pplaEditBookingDraft.containersConfirmed || 0),
-        bookingStatus: newBookingStatus,
-        updatedAt: serverTimestamp(),
-      });
-
-      // Always update contract bookingStatus to Booking Confirmed when entering booking number
-      if (newBookingNumberEntered && selectedPplaLARowForBookings) {
-        try {
-          const contractId = selectedPplaLARowForBookings.contractId;
-          const contractRef = doc(db, CONTRACT_PATH, contractId);
-          const contractSnapshot = await getDoc(contractRef);
-          
-          if (contractSnapshot.exists()) {
-            const contract = contractSnapshot.data();
-            
-            // Update ALL COs to AVAILABLE status
-            const updatedCuttingOrders = (contract.cuttingOrders || []).map((co: any) => ({
-              ...co,
-              status: 'AVAILABLE',
-              atwStatus: 'AVAILABLE',
-            }));
-            
-            console.log('Updating contract:', contractId, 'with booking status: Booking Confirmed');
-            console.log('Updated COs:', updatedCuttingOrders);
-            
-            // Always update contract with new COs and booking status
-            await updateDoc(contractRef, {
-              cuttingOrders: updatedCuttingOrders,
-              bookingStatus: 'Booking Confirmed',
-              updatedAt: serverTimestamp(),
-            });
-            
-            console.log('Contract updated successfully');
-            
-            // Refetch to confirm update
-            const updatedContractSnapshot = await getDoc(contractRef);
-            if (updatedContractSnapshot.exists()) {
-              const updatedContract = updatedContractSnapshot.data();
-              console.log('Refetched contract, new bookingStatus:', updatedContract.bookingStatus);
-              setSelectedPplaLARowForBookings((prev) => prev ? {
-                ...prev,
-                bookingStatus: updatedContract.bookingStatus,
-              } : null);
-            }
-          } else {
-            console.error('Contract does not exist:', contractId);
-          }
-        } catch (coError: any) {
-          console.error('Failed to update contract:', coError);
-          toast({ variant: 'destructive', title: 'Warning', description: 'Booking updated but could not update LA/CO status: ' + coError.message });
-        }
-      }
-
-      toast({ title: 'Booking Updated', description: 'Booking details were successfully updated.' });
-      setPplaEditBookingDraft({
-        bookingNumber: '',
-        shippingLine: '',
-        vesselName: '',
-        pod: '',
-        attachmentUrls: [],
-        containersConfirmed: 0,
-      });
-      setPplaEditBookingAttachmentFiles([]);
-      if (pplaEditBookingAttachmentInputRef.current) {
-        pplaEditBookingAttachmentInputRef.current.value = '';
-      }
-      setSelectedPplaBookingForEdit(null);
-      setIsPplaBookingsModalOpen(false);
-    } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Error Updating Booking', description: err.message });
-    }
-  };
-
-  const handleFinalizePplaBookingsModal = async () => {
-    if (!db || !selectedPplaLARowForBookings) return;
-
-    try {
-      const pendingBindRows = pplaExistingBookingsToBind.filter((row) =>
-        selectedPplaExistingBookingKeys.includes(pplaExistingBookingKey(row))
-      );
-
-      if (pendingBindRows.length > 0) {
-        const batch = writeBatch(db);
-        const selectedBatchIds = Array.from(new Set(pendingBindRows.map((row) => row.batchId)));
-        selectedBatchIds.forEach((batchId) => {
-          const sourceBatch = (bookings || []).find((item: any) => item.id === batchId);
-          const existingItems = Array.isArray(sourceBatch?.items) ? sourceBatch.items : [];
-          const nextItems = existingItems.map((item: any) => ({
-            ...item,
-            laId: selectedPplaLARowForBookings.id,
-          }));
-          const payload: any = {
-            laId: selectedPplaLARowForBookings.id,
-            customerName: selectedPplaLARowForBookings.customerName,
-            weekNumber: selectedPplaLARowForBookings.weekNumber,
-            updatedAt: serverTimestamp(),
-          };
-          if (nextItems.length > 0) {
-            payload.items = nextItems;
-          }
-          batch.update(doc(db, BOOKING_PATH, batchId), payload);
-        });
-        await batch.commit();
-      }
-
-      const projectedAssociated = [...pplaAssociatedBookings, ...pendingBindRows].reduce((acc, row) => {
-        const key = `${row.batchId}:${row.id}`;
-        if (!acc.some((item) => `${item.batchId}:${item.id}` === key)) {
-          acc.push(row);
-        }
-        return acc;
-      }, [] as BookingListRow[]);
-
-      const bookingBatchIds = Array.from(new Set(projectedAssociated.map((row) => row.batchId).filter(Boolean)));
-      const bookingNumbers = Array.from(new Set(projectedAssociated.map((row) => row.bookingNumber).filter((value) => value && value !== '--')));
-      const bookedVansConfirmed = projectedAssociated.reduce((sum, row) => sum + (Number(row.containersConfirmed || 0) || 0), 0);
-
-      await updateDoc(doc(db, CONTRACT_PATH, selectedPplaLARowForBookings.contractId), {
-        workflowStage: 'BOOKINGS_CREATED',
-        bookingBatchIds,
-        bookingNumbers,
-        bookedVansConfirmed,
-        updatedAt: serverTimestamp(),
-      });
-
-      setSelectedPplaExistingBookingKeys([]);
-      setIsPplaBookingsModalOpen(false);
-      toast({ title: 'Bindings Saved', description: 'Loading advice booking bindings were confirmed successfully.' });
-    } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Submit Failed', description: err.message });
-    }
-  };
-
-  const handleBindExistingPplaBookings = async () => {
-    if (!db || !selectedPplaLARowForBookings) return;
-    if (selectedPplaExistingBookingKeys.length === 0) {
-      toast({ variant: 'destructive', title: 'No Selection', description: 'Select at least one booking to bind.' });
-      return;
-    }
-
-    const selectedBatchIds = Array.from(new Set(selectedPplaExistingBookingKeys.map((key) => key.split(':')[0])));
-    try {
-      const batch = writeBatch(db);
-      selectedBatchIds.forEach((batchId) => {
-        const sourceBatch = (bookings || []).find((item: any) => item.id === batchId);
-        const existingItems = Array.isArray(sourceBatch?.items) ? sourceBatch.items : [];
-        const nextItems = existingItems.map((item: any) => ({
-          ...item,
-          laId: selectedPplaLARowForBookings.id,
-        }));
-        const payload: any = {
-          laId: selectedPplaLARowForBookings.id,
-          customerName: selectedPplaLARowForBookings.customerName,
-          weekNumber: selectedPplaLARowForBookings.weekNumber,
-          updatedAt: serverTimestamp(),
-        };
-        if (nextItems.length > 0) {
-          payload.items = nextItems;
-        }
-        batch.update(doc(db, BOOKING_PATH, batchId), payload);
-      });
-      await batch.commit();
-      toast({ title: 'Bookings Bound', description: 'Selected bookings were successfully bound to this loading advice.' });
-      setSelectedPplaExistingBookingKeys([]);
-    } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Bind Failed', description: err.message });
-    }
-  };
-
-  const handleDetachPplaBooking = async (booking: BookingListRow) => {
-    if (!db || !selectedPplaLARowForBookings) return;
-
-    try {
-      const bookingRef = doc(db, BOOKING_PATH, booking.batchId);
-      const sourceBatch = (bookings || []).find((item: any) => item.id === booking.batchId);
-      const existingItems = Array.isArray(sourceBatch?.items) ? sourceBatch.items : [];
-      const existingRows = Array.isArray(sourceBatch?.rows) ? sourceBatch.rows : [];
-
-      const payload: any = {
-        laId: '',
-        updatedAt: serverTimestamp(),
-      };
-
-      if (existingItems.length > 0) {
-        payload.items = existingItems.map((item: any) => ({
-          ...item,
-          laId: '',
-        }));
-      }
-
-      if (existingRows.length > 0) {
-        payload.rows = existingRows.map((row: any) => ({
-          ...row,
-          laId: '',
-        }));
-      }
-
-      await updateDoc(bookingRef, payload);
-
-      toast({
-        title: 'Booking Detached',
-        description: 'The booking was unbound from this loading advice.',
-      });
-    } catch (err: any) {
-      toast({
-        variant: 'destructive',
-        title: 'Detach Failed',
-        description: err.message,
-      });
-    }
-  };
-
-  const openPplaContainerModal = (row: CuttingOrderListRow) => {
-    setSelectedPplaAllocationRowForContainer(row);
-    setPplaContainerModalTab('add-new');
-    const matched = pplaContainerRegistryRows.find((item) => item.containerNo === row.containerNo);
-    setSelectedPplaExistingContainerKey(matched?.id || '');
-    setPplaNewContainerDraft({
-      containerNo: row.containerNo && row.containerNo !== '--' ? row.containerNo : '',
-      vanNo: '',
-      sealNo: '',
-      atwStatus: 'Y',
-      atwReleased: format(new Date(), 'yyyy-MM-dd'),
-      pmNo: '',
-      driverName: '',
-      dateWithdrawn: format(new Date(), 'yyyy-MM-dd'),
-    });
-    setIsPplaContainerModalOpen(true);
-  };
-
-  const handleCreateAndBindPplaContainer = async () => {
-    if (!db || !selectedPplaAllocationRowForContainer) return;
-    if (!pplaNewContainerDraft.containerNo) {
-      toast({ variant: 'destructive', title: 'Validation Error', description: 'Container No is required.' });
-      return;
-    }
-
-    try {
-      const tripId = `TRIP-${Date.now()}`;
-      await setDoc(doc(db, TRIP_PATH, tripId), {
-        tripId,
-        containerNo: pplaNewContainerDraft.containerNo,
-        vanNo: pplaNewContainerDraft.vanNo,
-        sealNo: pplaNewContainerDraft.sealNo,
-        atwStatus: pplaNewContainerDraft.atwStatus,
-        dateAtwReleased: pplaNewContainerDraft.atwReleased,
-        pmNo: pplaNewContainerDraft.pmNo,
-        driver: pplaNewContainerDraft.driverName,
-        dateWithdrawn: pplaNewContainerDraft.dateWithdrawn,
-        customerName: selectedPplaAllocationRowForContainer.customerName || '',
-        weekNumber: selectedPplaAllocationRowForContainer.weekNumber || '',
-        pod: selectedPplaAllocationRowForContainer.pod || '',
-        shippingLine: selectedPplaAllocationRowForContainer.shippingLine || '',
-        status: 'ACTIVE',
-        workflowStage: 'TRIP_CREATED',
-        cuttingOrders: [],
-        cuttingOrderTotal: 0,
-        updatedAt: serverTimestamp(),
-      });
-
-      await handleInlineCuttingOrderRowUpdate(selectedPplaAllocationRowForContainer, {
-        containerNo: pplaNewContainerDraft.containerNo,
-        // atwStatus: mapContainerAtwStatusToCuttingOrderAtwStatus(pplaNewContainerDraft.atwStatus),
-      });
-
-      toast({ title: 'Container Bound', description: 'New container was added and bound to the selected CO.' });
-      setIsPplaContainerModalOpen(false);
-    } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Bind Failed', description: err.message });
-    }
-  };
-
-  const handleBindExistingPplaContainer = async () => {
-    if (!selectedPplaAllocationRowForContainer) return;
-    const selectedContainer = pplaContainerRegistryRows.find((row) => row.id === selectedPplaExistingContainerKey);
-    if (!selectedContainer) {
-      toast({ variant: 'destructive', title: 'No Selection', description: 'Select one container to bind.' });
-      return;
-    }
-
-    await handleInlineCuttingOrderRowUpdate(selectedPplaAllocationRowForContainer, {
-      containerNo: selectedContainer.containerNo,
-      // atwStatus: mapContainerAtwStatusToCuttingOrderAtwStatus(selectedContainer.atwStatus),
-    });
-
-    toast({ title: 'Container Bound', description: 'Selected container was bound to the CO row.' });
-    setIsPplaContainerModalOpen(false);
-  };
-
-  const handleDetachPplaContainer = async () => {
-    if (!selectedPplaAllocationRowForContainer) return;
-
-    await handleInlineCuttingOrderRowUpdate(selectedPplaAllocationRowForContainer, {
-      containerNo: '--',
-      // atwStatus: 'PENDING',
-    });
-
-    toast({ title: 'Container Detached', description: 'The container was unbound from this CO row.' });
-  };
-
   const handleSaveCOS = async () => {
     if (!db || !selectedContract) return;
     try {
@@ -2607,18 +1582,6 @@ export default function MyProduceDashboard() {
   };
 
   const addLARow = () => setLaRows([...laRows, createEmptyLARow()]);
-  const copyLARow = (row: LARow) => setLaRows([...laRows, { ...row, id: Math.random().toString(36).substr(2, 9) }]);
-  const isLARowFilled = (row: LARow) => Boolean(
-    row.farm ||
-    row.pol ||
-    row.pod ||
-    row.shippingLine ||
-    row.cutOffDate ||
-    row.etd ||
-    row.totalVans ||
-    row.sku ||
-    row.palletization
-  );
   const addBookingRow = () => setBookingRows([...bookingRows, createEmptyBookingRow()]);
 
   const addTripRow = () => {
@@ -2646,80 +1609,50 @@ export default function MyProduceDashboard() {
       return;
     }
     
-    // Fetch all cutting orders for the customer-week-POD combination
-    const matchingCOs: CORow[] = [];
-    
-    if (Array.isArray(contracts)) {
-      contracts.forEach((contract: any) => {
-        // Check if contract matches customer and week
-        if (contract.customerName === newTripHeader.customerName && contract.weekNumber === newTripHeader.weekNumber) {
-          // Get cutting orders for this contract
-          if (Array.isArray(contract.cuttingOrders) && contract.cuttingOrders.length > 0) {
-            contract.cuttingOrders.forEach((co: any, index: number) => {
-              // Filter by POD
-              if (co.pod === newTripHeader.pod) {
-                matchingCOs.push({
-                  id: co.itemId || `CO-${contract.id}-${index}`,
-                  ps: co.ps || String(matchingCOs.length + 1),
-                  pod: co.pod || newTripHeader.pod,
-                  status: co.status || 'PENDING',
-                  cutOffDate: co.cutOffDate || '',
-                  etd: co.etd || '',
-                  taskDate: '',
-                  sku: co.sku || '',
-                  palletization: co.palletization || '',
-                          containerNo: co.containerNo || '',
-                          originalContainerNo: co.containerNo || '',
-                  shippingLine: co.shippingLine || newTripHeader.shippingLine || '',
-                  bookingNo: co.bookingNo || newTripHeader.bookingNo || '',
-                  atwStatus: co.atwStatus || 'PENDING'
-                });
-              }
-            });
-          }
-        }
-      });
-    }
+    const mockItems: CORow[] = [{
+      id: `MOCK-${Date.now()}-1`,
+      ps: '1',
+    pod: newTripHeader.pod || 'SHA',
+      status: 'PENDING',
+      cutOffDate: format(new Date(), 'yyyy-MM-dd'),
+      etd: format(new Date(), 'yyyy-MM-dd'),
+      taskDate: format(new Date(), 'yyyy-MM-dd'),
+      sku: 'SKU-001',
+      palletization: 'PALLETIZE',
+      containerNo: '',
+      shippingLine: newTripHeader.shippingLine || '',
+      bookingNo: newTripHeader.bookingNo || '',
+      atwStatus: 'PENDING'
+    }];
 
-    // If no matching COs found, show a warning but allow proceeding
-    if (matchingCOs.length === 0) {
-      toast({ 
-        title: "No Cutting Orders Found", 
-        description: `No cutting orders found for ${newTripHeader.customerName} - Week ${newTripHeader.weekNumber} - ${newTripHeader.pod}. You can add rows manually.` 
-      });
-    }
-
-    setBindCoRows(matchingCOs);
+    setBindCoRows(mockItems);
     setTripStep(2);
   };
 
   const handleSubmitTripBatch = async () => {
     if (!db) return;
     try {
+      const normalizedCuttingOrders = bindCoRows.map((row, index) => ({
+        itemId: row.id || `CO-${Date.now()}-${index}`,
+        ps: row.ps || String(index + 1),
+        pod: row.pod || newTripHeader.pod || '',
+        status: normalizeCuttingOrderStatus(row.status),
+        cutOffDate: row.cutOffDate || '',
+        etd: row.etd || '',
+        taskDate: row.taskDate || '',
+        sku: row.sku || '',
+        palletization: row.palletization || '',
+        containerNo: row.containerNo || '',
+        shippingLine: row.shippingLine || newTripHeader.shippingLine || '',
+        bookingNo: row.bookingNo || newTripHeader.bookingNo || '',
+        bookingBatchId: newTripHeader.bookingBatchId || '',
+        laId: newTripHeader.laId || '',
+        atwStatus: row.atwStatus || 'PENDING',
+      }));
+
       const batch = writeBatch(db);
       tripRows.forEach((row, index) => {
         const uniqueId = `TRIP-${Date.now()}-${index}`;
-        const boundOrders = row.containerNo ? bindCoRows.filter((order) => order.containerNo === row.containerNo) : [];
-        // Only create a trip if there are bound cutting orders for this container
-        if (!row.containerNo || boundOrders.length === 0) return;
-        const normalizedCuttingOrders = boundOrders.map((order, coIndex) => ({
-          itemId: order.id || `CO-${Date.now()}-${coIndex}`,
-          tripId: uniqueId,
-          ps: order.ps || String(coIndex + 1),
-          pod: order.pod || newTripHeader.pod || '',
-          status: normalizeCuttingOrderStatus(order.status),
-          cutOffDate: order.cutOffDate || '',
-          etd: order.etd || '',
-          taskDate: order.taskDate || '',
-          sku: order.sku || '',
-          palletization: order.palletization || '',
-          containerNo: order.containerNo || '',
-          shippingLine: order.shippingLine || newTripHeader.shippingLine || '',
-          bookingNo: order.bookingNo || newTripHeader.bookingNo || '',
-          bookingBatchId: newTripHeader.bookingBatchId || '',
-          laId: newTripHeader.laId || '',
-          atwStatus: order.atwStatus || 'PENDING',
-        }));
         const docRef = doc(db, TRIP_PATH, uniqueId);
         batch.set(docRef, {
           tripId: uniqueId,
@@ -2756,21 +1689,6 @@ export default function MyProduceDashboard() {
         });
       });
       await batch.commit();
-
-      if (newTripHeader.laId && Array.isArray(contracts)) {
-        const contract = (contracts as any).find((item: any) => item.id === newTripHeader.laId);
-        if (contract && Array.isArray(contract.cuttingOrders) && contract.cuttingOrders.length > 0) {
-          const updatedContractRows = contract.cuttingOrders.map((co: any) => {
-            const boundRow = bindCoRows.find((row) => row.id === (co.itemId || co.id));
-            if (boundRow && boundRow.containerNo) {
-              return { ...co, containerNo: boundRow.containerNo };
-            }
-            return co;
-          });
-          await persistCuttingOrderContractRows(contract.id, updatedContractRows);
-        }
-      }
-
       toast({ title: "Trips Created", description: "Successfully logged new trip batch." });
       setIsNewTripOpen(false);
       setTripStep(1);
@@ -2870,7 +1788,6 @@ export default function MyProduceDashboard() {
     const normalizedRows = rows.map((item) => ({
       itemId: item.id,
       ps: item.ps,
-      taskDate: item.taskDate,
       shippingLine: item.shippingLine,
       bookingNo: item.bookingNo,
       containerNo: item.containerNo,
@@ -2905,62 +1822,6 @@ export default function MyProduceDashboard() {
     });
 
     await batch.commit();
-  };
-
-  const handleInlineCuttingOrderRowUpdate = async (
-    row: CuttingOrderListRow,
-    updates: Partial<Pick<CuttingOrderListRow, 'ps' | 'taskDate' | 'bookingNo' | 'containerNo' | 'atwStatus'>>
-  ) => {
-    const nextPs = (updates.ps ?? row.ps).trim();
-    const nextTaskDate = updates.taskDate ?? row.taskDate ?? '';
-    const nextBookingNo = (updates.bookingNo ?? row.bookingNo ?? '').trim();
-    const nextContainerNo = (updates.containerNo ?? row.containerNo ?? '').trim();
-    const nextAtwStatus = updates.atwStatus ?? row.atwStatus;
-
-    if (
-      nextPs === row.ps &&
-      nextTaskDate === (row.taskDate || '') &&
-      nextBookingNo === (row.bookingNo || '') &&
-      nextContainerNo === (row.containerNo || '') &&
-      nextAtwStatus === row.atwStatus
-    ) return;
-
-    try {
-      const contractRows = cuttingOrderRows
-        .map((item) =>
-          item.contractId === row.contractId && item.id === row.id
-            ? {
-                ...item,
-                ps: nextPs || item.ps,
-                taskDate: nextTaskDate,
-                bookingNo: nextBookingNo,
-                containerNo: nextContainerNo,
-                atwStatus: nextAtwStatus,
-              }
-            : item
-        )
-        .filter((item) => item.contractId === row.contractId);
-
-      await persistCuttingOrderContractRows(row.contractId, contractRows);
-      setSelectedPplaAllocationRowForContainer((current) => {
-        if (!current) return current;
-        if (current.contractId !== row.contractId || current.id !== row.id) return current;
-        return {
-          ...current,
-          ps: nextPs || current.ps,
-          taskDate: nextTaskDate,
-          bookingNo: nextBookingNo,
-          containerNo: nextContainerNo,
-          atwStatus: nextAtwStatus,
-        };
-      });
-      toast({
-        title: 'Row Updated',
-        description: 'Row changes were saved.',
-      });
-    } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Update Failed', description: err.message });
-    }
   };
 
   const handleChangeTripOrderStatus = async (trip: any, order: any) => {
@@ -3235,38 +2096,6 @@ export default function MyProduceDashboard() {
     verificationData.preparedBy.signatureDataUrl,
     drVerification.preparedBy.signatureDataUrl,
   ]);
-
-  // Clear booking drafts and forms when Associated Bookings modal closes
-  useEffect(() => {
-    if (!isPplaBookingsModalOpen) {
-      setPplaNewBookingDraft({
-        bookingNumber: '',
-        shippingLine: '',
-        vesselName: '',
-        pod: '',
-        attachmentUrls: [],
-        containersConfirmed: 0,
-      });
-      setPplaEditBookingDraft({
-        bookingNumber: '',
-        shippingLine: '',
-        vesselName: '',
-        pod: '',
-        attachmentUrls: [],
-        containersConfirmed: 0,
-      });
-      setPplaBookingAttachmentFiles([]);
-      setPplaEditBookingAttachmentFiles([]);
-      if (pplaBookingAttachmentInputRef.current) {
-        pplaBookingAttachmentInputRef.current.value = '';
-      }
-      if (pplaEditBookingAttachmentInputRef.current) {
-        pplaEditBookingAttachmentInputRef.current.value = '';
-      }
-      setSelectedPplaBookingForEdit(null);
-      setPplaBookingModalTab('add-new');
-    }
-  }, [isPplaBookingsModalOpen]);
 
   const getPreparedByCanvasPoint = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = preparedByCanvasRef.current;
@@ -3730,7 +2559,6 @@ export default function MyProduceDashboard() {
           cuttingOrders: contractRows.map((item) => ({
             itemId: item.id,
             ps: item.ps,
-            taskDate: item.taskDate,
             shippingLine: item.shippingLine,
             bookingNo: item.bookingNo,
             containerNo: item.containerNo,
@@ -3753,7 +2581,6 @@ export default function MyProduceDashboard() {
           batch.set(rowRef, {
             itemId: rowRef.id,
             ps: item.ps,
-            taskDate: item.taskDate,
             shippingLine: item.shippingLine,
             bookingNo: item.bookingNo,
             containerNo: item.containerNo,
@@ -3783,7 +2610,7 @@ export default function MyProduceDashboard() {
     const nextStatus = getNextCuttingOrderStatus(row.status);
     await handleUpdateCuttingOrderStatus(row, nextStatus);
   };
-console.log(`hex: `, customerMappings)
+
   const shippingDocRows: Array<{
     label: string;
     actions: ShippingDocAction[];
@@ -3836,149 +2663,17 @@ console.log(`hex: `, customerMappings)
     return Object.entries(summary).map(([packType, qty]) => ({ packType, qty }));
   };
 
-  const handleConfigImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setIsImportingConfig(true);
-    try {
-      // Prepare FormData for sending to backend - no longer sending configType
-      const formData = new FormData();
-      formData.append('file', file);
-
-      // Send to backend for processing ALL sheets
-      const response = await fetch('/api/config/import', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        
-        // Collect all config data to save to Firestore
-        const configToSave: Record<string, any[]> = {
-          'pricing-condition': [],
-          'incoterm': [],
-          'customer-mapping': [],
-          'pack-type': [],
-          'shipping-lines': [],
-          'vessels': [],
-          'port-of-loading': [],
-          'customer-to-packtype': [],
-        };
-
-        // Process all sheets returned from backend
-        if (result.sheets && Array.isArray(result.sheets)) {
-          result.sheets.forEach((sheetResult: any) => {
-            const data = sheetResult.data || [];
-            
-            switch (sheetResult.configType) {
-              case 'pricing-condition':
-                setPricingConditions(data);
-                configToSave['pricing-condition'] = data;
-                break;
-              case 'incoterm':
-                setIncotermData(data);
-                configToSave['incoterm'] = data;
-                break;
-              case 'customer-mapping':
-                // Store all columns as-is from Excel
-                console.log('📋 Customer Mapping Data Received:', {
-                  rowCount: data.length,
-                  headers: data.length > 0 ? Object.keys(data[0]) : [],
-                  firstRow: data.length > 0 ? data[0] : null,
-                });
-                setCustomerMappingData(data);
-                configToSave['customer-mapping'] = data;
-                break;
-              case 'pack-type':
-                setMaterialPackTypes(data);
-                configToSave['pack-type'] = data;
-                break;
-              case 'shipping-lines':
-                setBrandMappings(data);
-                configToSave['shipping-lines'] = data;
-                break;
-              case 'vessels':
-                setProfitCenters(data);
-                configToSave['vessels'] = data;
-                break;
-              case 'port-of-loading':
-                setPortOfLoadings(data);
-                configToSave['port-of-loading'] = data;
-                break;
-              case 'port-of-destination':
-                setPortOfDestinations(data);
-                configToSave['port-of-destination'] = data;
-                break;
-              case 'customer-to-packtype':
-                console.log('📋 Customer to Pack Type Data Received:', {
-                  rowCount: data.length,
-                  headers: data.length > 0 ? Object.keys(data[0]) : [],
-                  firstRow: data.length > 0 ? data[0] : null,
-                });
-                setCustomerToPackTypeData(data);
-                configToSave['customer-to-packtype'] = data;
-                break;
-              default:
-                break;
-            }
-          });
-        }
-
-        // Save all config data to Firestore for persistence
-        const saved = await saveConfigToFirestore(configToSave);
-
-        // Get sheet details for notification
-        const sheetDetails = result.sheets
-          .filter((s: any) => s.created > 0)
-          .map((s: any) => `${s.label} (${s.created})`)
-          .join(', ');
-
-        toast({
-          title: 'Import Successful',
-          description: `Imported ${result.summary?.totalCreated || 0} total records${sheetDetails ? ` - ${sheetDetails}` : ''}${saved ? ' and saved to Firestore' : ''} in ${file.name}`,
-        });
-
-        // Log sheets for debugging
-        console.log('Imported sheets:', result.sheets);
-      } else {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to import configuration data');
-      }
-    } catch (error: any) {
-      console.error('Config import error:', error);
-      toast({
-        title: 'Import Error',
-        description: error?.message || 'An error occurred during import.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsImportingConfig(false);
-      // Reset file input
-      if (configFileInputRef.current) {
-        configFileInputRef.current.value = '';
-      }
-    }
-  };
-
   const renderCuttingOrdersView = () => (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex items-center gap-4 mb-4">
         <Select value={weekFilter} onValueChange={setWeekFilter}>
           <SelectTrigger className="w-[300px] h-12 bg-white"><SelectValue placeholder="Select Week Number" /></SelectTrigger>
-          <SelectContent><SelectItem value="all">All Weeks</SelectItem>{weekOptions.map(w => (<SelectItem key={w.value} value={w.value}>{w.label}</SelectItem>))}</SelectContent>
+          <SelectContent><SelectItem value="all">All Weeks</SelectItem>{weekOptions.map(w => (<SelectItem key={w} value={w}>{w}</SelectItem>))}</SelectContent>
         </Select>
-        <SearchableCustomerDropdown
-          selectedCustomer={selectedCustomerObject}
-          customerMappings={customerMappings}
-          onSelectCustomer={(c) => {
-            setCustomerFilter(c ? c.Customer : 'all');
-            setSelectedCustomerObject(c);
-          }}
-          inputClassName="h-12 bg-white"
-          containerClassName="w-[300px]"
-        />
+        <Select value={customerFilter} onValueChange={setCustomerFilter}>
+          <SelectTrigger className="w-[300px] h-12 bg-white"><SelectValue placeholder="Select Customer" /></SelectTrigger>
+          <SelectContent><SelectItem value="all">All Customers</SelectItem>{customerMappings?.map((c: any) => (<SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>))}</SelectContent>
+        </Select>
         <div className="ml-auto flex items-center gap-4 text-gray-400">
           <Bell className="h-5 w-5 cursor-pointer" />
           <HelpCircle className="h-5 w-5 cursor-pointer" />
@@ -4035,7 +2730,6 @@ console.log(`hex: `, customerMappings)
         <div className="p-6 border-b flex justify-between items-center">
           <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">RECENT CUTTING ORDERS</h3>
           <div className="flex gap-2">
-            <Button variant="outline" className="h-8 px-3 text-[10px] font-black uppercase tracking-widest border-gray-100 gap-2" onClick={() => setIsComingSoonModalOpen(true)}><Download className="h-3 w-3" /> EXPORT</Button>
             <Button variant="outline" className="h-8 px-3 text-[10px] font-black uppercase tracking-widest border-gray-100 gap-2"><Filter className="h-3 w-3" /> FILTER</Button>
             {selectedFilteredCuttingOrderRows.length > 0 && (
               <Button
@@ -4077,7 +2771,6 @@ console.log(`hex: `, customerMappings)
               <TableHead className="text-[9px] font-black uppercase text-gray-400">POD</TableHead>
               <TableHead className="text-[9px] font-black uppercase text-gray-400">Cut-Off Date</TableHead>
               <TableHead className="text-[9px] font-black uppercase text-gray-400">ETD</TableHead>
-              <TableHead className="text-[9px] font-black uppercase text-gray-400">Task Date</TableHead>
               <TableHead className="text-[9px] font-black uppercase text-gray-400">SKU</TableHead>
               <TableHead className="text-[9px] font-black uppercase text-gray-400">Palletization</TableHead>
               <TableHead className="text-[9px] font-black uppercase text-gray-400">Status</TableHead>
@@ -4112,7 +2805,7 @@ console.log(`hex: `, customerMappings)
                         ? 'border-red-200 bg-red-50 text-red-600'
                         : row.atwStatus === 'READY'
                           ? 'border-amber-200 bg-amber-50 text-amber-600'
-                          : row.atwStatus === 'LOADED' || row.atwStatus === 'AVAILABLE'
+                          : row.atwStatus === 'LOADED'
                             ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                             : 'border-slate-200 bg-slate-50 text-slate-600'
                     )}
@@ -4123,14 +2816,6 @@ console.log(`hex: `, customerMappings)
                 <TableCell className="text-xs uppercase">{row.pod}</TableCell>
                 <TableCell className="text-xs text-gray-500">{row.cutOffDate}</TableCell>
                 <TableCell className="text-xs text-gray-500">{row.etd}</TableCell>
-                <TableCell className="text-xs text-gray-500">
-                  <Input
-                    type="date"
-                    value={row.taskDate || ''}
-                    onChange={(event) => handleInlineCuttingOrderRowUpdate(row, { taskDate: event.target.value })}
-                    className="h-8 w-[150px]"
-                  />
-                </TableCell>
                 <TableCell className="text-xs font-bold">{row.sku}</TableCell>
                 <TableCell className="text-xs">{row.palletization}</TableCell>
                 <TableCell className="text-center">
@@ -4524,18 +3209,12 @@ console.log(`hex: `, customerMappings)
       <div className="flex items-center gap-4 mb-4">
         <Select value={weekFilter} onValueChange={setWeekFilter}>
           <SelectTrigger className="w-[300px] h-12 bg-white"><SelectValue placeholder="Select Week Number" /></SelectTrigger>
-          <SelectContent><SelectItem value="all">All Weeks</SelectItem>{weekOptions.map(w => (<SelectItem key={w.value} value={w.value}>{w.label}</SelectItem>))}</SelectContent>
+          <SelectContent><SelectItem value="all">All Weeks</SelectItem>{weekOptions.map(w => (<SelectItem key={w} value={w}>{w}</SelectItem>))}</SelectContent>
         </Select>
-        <SearchableCustomerDropdown
-          selectedCustomer={selectedCustomerObject}
-          customerMappings={customerMappings}
-          onSelectCustomer={(c) => {
-            setCustomerFilter(c ? c.Customer : 'all');
-            setSelectedCustomerObject(c);
-          }}
-          inputClassName="h-12 bg-white"
-          containerClassName="w-[300px]"
-        />
+        <Select value={customerFilter} onValueChange={setCustomerFilter}>
+          <SelectTrigger className="w-[300px] h-12 bg-white"><SelectValue placeholder="Select Customer" /></SelectTrigger>
+          <SelectContent><SelectItem value="all">All Customers</SelectItem>{customerMappings?.map((c: any) => (<SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>))}</SelectContent>
+        </Select>
         <div className="ml-auto flex items-center gap-4 text-gray-400">
           <Bell className="h-5 w-5 cursor-pointer" />
           <HelpCircle className="h-5 w-5 cursor-pointer" />
@@ -4580,16 +3259,15 @@ console.log(`hex: `, customerMappings)
             className="h-10 px-6 bg-anflocor-green text-white font-bold uppercase text-xs tracking-widest gap-2"
             onClick={() => {
               setTripStep(1);
-              const selectedBooking = bookingFilter !== 'all' ? bookingListRows.find((bk: any) => bk.bookingNumber === bookingFilter) : undefined;
               setNewTripHeader({
-                customerName: customerFilter !== 'all' ? customerFilter : '',
-                weekNumber: weekFilter !== 'all' ? weekFilter : '',
-                bookingNo: bookingFilter !== 'all' ? bookingFilter : '',
-                bookingBatchId: selectedBooking?.batchId || '',
-                laId: selectedBooking?.laId || '',
-                shippingLine: selectedBooking?.shippingLine || '',
-                vessel: selectedBooking?.vesselName || '',
-                pod: selectedBooking?.pod || '',
+                customerName: '',
+                weekNumber: '',
+                bookingNo: '',
+                bookingBatchId: '',
+                laId: '',
+                shippingLine: '',
+                vessel: '',
+                pod: '',
               });
               setTripRows([{
                 id: Math.random().toString(36).substr(2, 9),
@@ -4638,18 +3316,9 @@ console.log(`hex: `, customerMappings)
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="p-6 border-b flex flex-wrap items-center justify-between gap-3">
+        <div className="p-6 border-b flex justify-between items-center">
           <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">RECENT TRIP MANIFESTS</h3>
-          <div className="flex flex-wrap items-center gap-2">
-            <Select value={bookingFilter} onValueChange={setBookingFilter}>
-              <SelectTrigger className="w-[260px] h-10 bg-white"><SelectValue placeholder="All Booking Nos" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Booking Nos</SelectItem>
-                {bookingNumberFilterOptions.map((bookingNumber) => (
-                  <SelectItem key={bookingNumber} value={bookingNumber}>{bookingNumber}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="flex gap-2">
             <Button variant="outline" className="h-8 px-3 text-[10px] font-black uppercase tracking-widest border-gray-100 gap-2"><Filter className="h-3 w-3" /> FILTER</Button>
             <Button variant="outline" className="h-8 px-3 text-[10px] font-black uppercase tracking-widest border-gray-100 gap-2"><Download className="h-3 w-3" /> EXPORT</Button>
           </div>
@@ -5209,1245 +3878,6 @@ console.log(`hex: `, customerMappings)
     </div>
   );
 
-  const renderPPLAView = () => (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex items-center gap-4 mb-4">
-        <Select value={weekFilter} onValueChange={setWeekFilter}>
-          <SelectTrigger className="w-[300px] h-12 bg-white"><SelectValue placeholder="Select Week Number" /></SelectTrigger>
-          <SelectContent><SelectItem value="all">All Weeks</SelectItem>{weekOptions.map(w => (<SelectItem key={w.value} value={w.value}>{w.label}</SelectItem>))}</SelectContent>
-        </Select>
-        <SearchableCustomerDropdown
-          selectedCustomer={selectedCustomerObject}
-          customerMappings={customerMappings}
-          onSelectCustomer={(c) => {
-            setCustomerFilter(c ? c.Customer : 'all');
-            setSelectedCustomerObject(c);
-          }}
-          inputClassName="h-12 bg-white"
-          containerClassName="w-[300px]"
-        />
-        <div className="ml-auto flex items-center gap-4 text-gray-400">
-          <Bell className="h-5 w-5 cursor-pointer" />
-          <HelpCircle className="h-5 w-5 cursor-pointer" />
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-gray-900">
-            <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center"><User className="h-4 w-4" /></div>
-            COORDINATOR
-          </div>
-        </div>
-      </div>
-
-      <div className="flex justify-between items-end">
-        <div>
-          <div className="flex items-center text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">
-            <span>Logistics</span><ChevronRight className="h-3 w-3 mx-1" /><span>PPLA</span>
-          </div>
-          <h1 className="text-3xl font-black text-gray-900">PPLA</h1>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <Tabs value={pplaSubtab} onValueChange={setPplaSubtab} className="w-full">
-          <div className="border-b px-6 pt-6">
-            <TabsList className="bg-transparent border-none p-0 gap-8 w-full justify-start h-auto">
-              <TabsTrigger 
-                value="loading-advice"
-                className="rounded-none border-b-2 border-transparent px-0 py-3 font-bold uppercase text-xs tracking-widest text-gray-500 data-[state=active]:border-anflocor-green data-[state=active]:text-gray-900 data-[state=active]:bg-transparent"
-              >
-                Loading Advice
-              </TabsTrigger>
-              <TabsTrigger 
-                value="bookings"
-                className="rounded-none border-b-2 border-transparent px-0 py-3 font-bold uppercase text-xs tracking-widest text-gray-500 data-[state=active]:border-anflocor-green data-[state=active]:text-gray-900 data-[state=active]:bg-transparent"
-              >
-                Assign PS
-              </TabsTrigger>
-              <TabsTrigger 
-                value="allocations"
-                className="rounded-none border-b-2 border-transparent px-0 py-3 font-bold uppercase text-xs tracking-widest text-gray-500 data-[state=active]:border-anflocor-green data-[state=active]:text-gray-900 data-[state=active]:bg-transparent"
-              >
-                Booking & Container Binding
-              </TabsTrigger>
-            </TabsList>
-          </div>
-          
-          <TabsContent value="loading-advice" className="p-6 m-0 space-y-4">
-            <div className="flex justify-end">
-              <Button
-                className="h-10 rounded-sm bg-emerald-700 px-4 text-[11px] font-bold uppercase tracking-[0.18em] text-white shadow-sm hover:bg-emerald-800"
-                onClick={() => setIsNewLAOpen(true)}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                NEW LA
-              </Button>
-            </div>
-
-            <Card className="overflow-hidden border-slate-200 bg-white shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 md:px-5">
-                <h2 className="text-sm font-bold text-slate-950">Recent Loading Advice Manifests</h2>
-              </div>
-
-              <Table>
-                <TableHeader className="bg-slate-100/80">
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="w-12 px-3 py-3 text-center text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                      <Checkbox
-                        checked={allFilteredLoadingAdviceSelected ? true : someFilteredLoadingAdviceSelected ? 'indeterminate' : false}
-                        onCheckedChange={(checked) => {
-                          if (checked === true) {
-                            setSelectedLoadingAdviceKeys(filteredLoadingAdviceRows.map((row) => row.id));
-                          } else {
-                            setSelectedLoadingAdviceKeys([]);
-                          }
-                        }}
-                      />
-                    </TableHead>
-                    {/* <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Week No.</TableHead> */}
-                    <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Company</TableHead>
-                    <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Port of Loading</TableHead>
-                    <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Port of Destination</TableHead>
-                    <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Shipping Line</TableHead>
-                    <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">ETD</TableHead>
-                    <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Total Vans</TableHead>
-                    <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Booked Vans</TableHead>
-                    <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">SKU</TableHead>
-                    <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Palletization</TableHead>
-                    <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Booking Status</TableHead>
-                    <TableHead className="px-3 py-3 text-right text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {contractsLoading ? (
-                    <TableRow>
-                      <TableCell colSpan={14} className="h-56 text-center">
-                        <Loader2 className="mx-auto h-8 w-8 animate-spin text-emerald-700/50" />
-                      </TableCell>
-                    </TableRow>
-                  ) : pplaLoadingAdvicePageRows.length > 0 ? (
-                    pplaLoadingAdvicePageRows.map((row) => (
-                      <TableRow
-                        key={row.id}
-                        onClick={() => {
-                          setSelectedPplaLAForAssignPS(row);
-                          setPplaAssignPsPage(1);
-                          setPplaSubtab('bookings');
-                        }}
-                        className={cn(
-                          'h-14 cursor-pointer hover:bg-slate-50',
-                          selectedPplaLAForAssignPS?.contractId === row.contractId && 'bg-emerald-50/70 ring-1 ring-inset ring-emerald-200'
-                        )}
-                      >
-                        <TableCell className="px-3 py-3 text-center">
-                          <Checkbox
-                            checked={selectedLoadingAdviceKeys.includes(row.id)}
-                            onCheckedChange={(checked) => {
-                              setSelectedLoadingAdviceKeys((current) =>
-                                checked === true
-                                  ? [...new Set([...current, row.id])]
-                                  : current.filter((id) => id !== row.id)
-                              );
-                            }}
-                            onClick={(event) => event.stopPropagation()}
-                          />
-                        </TableCell>
-                        {/* <TableCell className="px-3 py-3 font-semibold text-slate-900">{row.weekNumber}</TableCell> */}
-                        <TableCell className="px-3 py-3 text-sm font-medium text-slate-700">{row.farm}</TableCell>
-                        <TableCell className="px-3 py-3 text-sm text-slate-700">{row.pol}</TableCell>
-                        <TableCell className="px-3 py-3 text-sm text-slate-700">{row.pod}</TableCell>
-                        <TableCell className="px-3 py-3 text-sm text-slate-700">{row.shippingLine}</TableCell>
-                        <TableCell className="px-3 py-3 text-sm text-slate-700">{row.etd}</TableCell>
-                        <TableCell className="px-3 py-3 text-sm font-semibold text-slate-900">{row.totalVans}</TableCell>
-                        <TableCell className="px-3 py-3 text-sm font-semibold text-slate-900">{bookedVansByContractId[row.id] || 0}</TableCell>
-                        <TableCell className="px-3 py-3 text-sm text-slate-700">{row.sku}</TableCell>
-                        <TableCell className="px-3 py-3 text-sm text-slate-700">{row.palletization}</TableCell>
-                        <TableCell className="px-3 py-3 text-sm text-center">
-                          <Badge variant={row.bookingStatus === 'Booking Confirmed' ? 'default' : row.bookingStatus === 'Booking Created' ? 'secondary' : 'outline'}>
-                            {row.bookingStatus || 'Empty'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="px-3 py-3 text-right" onClick={(event) => event.stopPropagation()}>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="text-gray-400">
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-44">
-                              <DropdownMenuItem
-                                className="gap-2 cursor-pointer"
-                                onSelect={() => {
-                                  setSelectedPplaLARowForBookings(row);
-                                  requestAnimationFrame(() => setIsPplaBookingsModalOpen(true));
-                                }}
-                              >
-                                Show Bookings
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={13} className="h-56 text-center text-sm text-slate-500">
-                        No loading advice manifests match the current filters.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-              <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-xs text-slate-600">
-                <span>
-                  Showing {pplaLoadingAdvicePageRows.length} of {filteredLoadingAdviceRows.length} rows
-                </span>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 px-3"
-                    disabled={pplaLoadingAdvicePage <= 1}
-                    onClick={() => setPplaLoadingAdvicePage((prev) => Math.max(1, prev - 1))}
-                  >
-                    Previous
-                  </Button>
-                  <span className="min-w-[80px] text-center font-semibold text-slate-700">
-                    {pplaLoadingAdvicePage} / {pplaLoadingAdviceTotalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 px-3"
-                    disabled={pplaLoadingAdvicePage >= pplaLoadingAdviceTotalPages}
-                    onClick={() => setPplaLoadingAdvicePage((prev) => Math.min(pplaLoadingAdviceTotalPages, prev + 1))}
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
-            </Card>
-          </TabsContent>
-          <TabsContent value="bookings" className="p-6 m-0">
-            {selectedPplaLAForAssignPS ? (
-              <div className="mb-4 flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
-                <div className="h-2 w-2 rounded-full bg-emerald-500" />
-                <span className="text-xs font-bold uppercase tracking-wide text-emerald-800">Selected LA:</span>
-                <span className="text-xs font-semibold text-emerald-900">{selectedPplaLAForAssignPS.farm} &mdash; {selectedPplaLAForAssignPS.pod} &mdash; {selectedPplaLAForAssignPS.shippingLine} &mdash; {selectedPplaLAForAssignPS.totalVans} van{Number(selectedPplaLAForAssignPS.totalVans) !== 1 ? 's' : ''}</span>
-                <button
-                  type="button"
-                  className="ml-auto text-[10px] font-bold uppercase tracking-wider text-emerald-700 hover:text-emerald-900"
-                  onClick={() => setSelectedPplaLAForAssignPS(null)}
-                >
-                  Clear
-                </button>
-              </div>
-            ) : (
-              <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
-                Click any row in the <span className="font-bold">Loading Advice</span> tab to filter cutting orders by LA.
-              </div>
-            )}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="p-6 border-b flex justify-between items-center">
-                <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">RECENT CUTTING ORDERS</h3>
-              </div>
-              <Table>
-                <TableHeader className="bg-gray-50/50">
-                  <TableRow>
-                    <TableHead className="w-12 text-center">
-                      <Checkbox
-                        checked={
-                          allFilteredCuttingOrdersSelected
-                            ? true
-                            : someFilteredCuttingOrdersSelected
-                              ? 'indeterminate'
-                              : false
-                        }
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            setSelectedCuttingOrderKeys(filteredCuttingOrderRows.map((row) => cuttingOrderRowKey(row)));
-                          } else {
-                            setSelectedCuttingOrderKeys([]);
-                          }
-                        }}
-                      />
-                    </TableHead>
-                    <TableHead className="text-[9px] font-black uppercase text-gray-400">PS</TableHead>
-                    <TableHead className="text-[9px] font-black uppercase text-gray-400">Shipping Line</TableHead>
-                    {/* <TableHead className="text-[9px] font-black uppercase text-gray-400">Booking No</TableHead>
-                    <TableHead className="text-[9px] font-black uppercase text-gray-400">Container No</TableHead> */}
-                    <TableHead className="text-[9px] font-black uppercase text-gray-400">ATW Status</TableHead>
-                    <TableHead className="text-[9px] font-black uppercase text-gray-400">POD</TableHead>
-                    <TableHead className="text-[9px] font-black uppercase text-gray-400">Cut-Off Date</TableHead>
-                    <TableHead className="text-[9px] font-black uppercase text-gray-400">ETD</TableHead>
-                    <TableHead className="text-[9px] font-black uppercase text-gray-400">Task Date</TableHead>
-                    <TableHead className="text-[9px] font-black uppercase text-gray-400">SKU</TableHead>
-                    <TableHead className="text-[9px] font-black uppercase text-gray-400">Palletization</TableHead>
-                    {/* <TableHead className="text-[9px] font-black uppercase text-gray-400">Status</TableHead> */}
-                    <TableHead className="text-[9px] font-black uppercase text-right text-gray-400">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pplaAssignPsPageRows.length > 0 ? pplaAssignPsPageRows.map((row) => (
-                    <TableRow
-                      key={`${row.contractId}-${row.id}`}
-                      className={cn(
-                        'h-16 cursor-pointer hover:bg-gray-50/50',
-                        selectedPplaAssignPSRow?.id === row.id && selectedPplaAssignPSRow?.contractId === row.contractId && 'bg-emerald-50/70 ring-1 ring-inset ring-emerald-200'
-                      )}
-                      onClick={() => {
-                        setSelectedPplaAssignPSRow(row);
-                        setPplaAllocationsPage(1);
-                        setPplaSubtab('allocations');
-                      }}
-                    >
-                      <TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
-                        <Checkbox
-                          checked={selectedCuttingOrderKeys.includes(cuttingOrderRowKey(row))}
-                          onCheckedChange={(checked) => {
-                            setSelectedCuttingOrderKeys((current) =>
-                              checked
-                                ? [...new Set([...current, cuttingOrderRowKey(row)])]
-                                : current.filter((key) => key !== cuttingOrderRowKey(row))
-                            );
-                          }}
-                        />
-                      </TableCell>
-                      <TableCell className="font-bold text-xs">
-                        <Select value={row.ps || 'PS1'} onValueChange={(value) => handleInlineCuttingOrderRowUpdate(row, { ps: value })}>
-                          <SelectTrigger className="h-8 w-[80px] text-xs" onClick={(event) => event.stopPropagation()}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="PS1">PS1</SelectItem>
-                            <SelectItem value="PS2">PS2</SelectItem>
-                            <SelectItem value="PS3">PS3</SelectItem>
-                            <SelectItem value="PS4">PS4</SelectItem>
-                            <SelectItem value="PS5">PS5</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell className="text-xs font-bold uppercase">{row.shippingLine}</TableCell>
-                      {/* <TableCell className="text-xs text-gray-500 font-semibold">{row.bookingNo}</TableCell>
-                      <TableCell className="font-bold text-xs">{row.containerNo}</TableCell> */}
-                      <TableCell className="text-center">
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            'font-bold uppercase tracking-wider text-[10px]',
-                            row.atwStatus === 'PENDING'
-                              ? 'border-red-200 bg-red-50 text-red-600'
-                              : row.atwStatus === 'READY'
-                                ? 'border-amber-200 bg-amber-50 text-amber-600'
-                                : row.atwStatus === 'LOADED' || row.atwStatus === 'AVAILABLE'
-                                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                                  : 'border-slate-200 bg-slate-50 text-slate-600'
-                          )}
-                        >
-                          {row.atwStatus}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-xs uppercase">{row.pod}</TableCell>
-                      <TableCell className="text-xs text-gray-500">{row.cutOffDate}</TableCell>
-                      <TableCell className="text-xs text-gray-500">{row.etd}</TableCell>
-                      <TableCell className="text-xs text-gray-500">
-                        <Input
-                          type="date"
-                          value={row.taskDate || ''}
-                          className="h-8 min-w-[150px]"
-                          onClick={(event) => event.stopPropagation()}
-                          onChange={(event) => {
-                            handleInlineCuttingOrderRowUpdate(row, { taskDate: event.target.value });
-                          }}
-                        />
-                      </TableCell>
-                      <TableCell className="text-xs font-bold">{row.sku}</TableCell>
-                      <TableCell className="text-xs">{row.palletization}</TableCell>
-                      {/* <TableCell className="text-center">
-                        <Select
-                          value={normalizeCuttingOrderStatus(row.status)}
-                          onValueChange={(value) => handleUpdateCuttingOrderStatus(row, value as CuttingOrderStatus)}
-                        >
-                          <SelectTrigger
-                            className={cn(
-                              'h-8 w-[130px] rounded-full border px-3 text-[10px] font-bold uppercase tracking-wider shadow-sm',
-                              getCuttingOrderStatusClassName(normalizeCuttingOrderStatus(row.status))
-                            )}
-                          >
-                            <SelectValue placeholder="Select Status" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="EMPTY">Empty</SelectItem>
-                            <SelectItem value="PENDING">Pending</SelectItem>
-                            <SelectItem value="ONGOING">Ongoing</SelectItem>
-                            <SelectItem value="DEPART">Depart</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </TableCell> */}
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="text-gray-400">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-52">
-                            <DropdownMenuItem
-                              className="gap-3 py-2.5 cursor-pointer font-medium"
-                              onClick={() => openEditCuttingOrderModal(row)}
-                            >
-                              <FileText className="h-4 w-4 text-gray-500" /> Edit
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  )) : (
-                    <TableRow>
-                      <TableCell colSpan={13} className="h-56 text-center text-sm text-slate-500">
-                        No cutting orders found for the current filters.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-              <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-xs text-slate-600">
-                <span>
-                  Showing {pplaAssignPsPageRows.length} of {pplaAssignPsRows.length} rows
-                </span>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 px-3"
-                    disabled={pplaAssignPsPage <= 1}
-                    onClick={() => setPplaAssignPsPage((prev) => Math.max(1, prev - 1))}
-                  >
-                    Previous
-                  </Button>
-                  <span className="min-w-[80px] text-center font-semibold text-slate-700">
-                    {pplaAssignPsPage} / {pplaAssignPsTotalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 px-3"
-                    disabled={pplaAssignPsPage >= pplaAssignPsTotalPages}
-                    onClick={() => setPplaAssignPsPage((prev) => Math.min(pplaAssignPsTotalPages, prev + 1))}
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </TabsContent>
-          <TabsContent value="allocations" className="p-6 m-0">
-            {selectedPplaAssignPSRow ? (
-              <div className="mb-4 flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
-                <div className="h-2 w-2 rounded-full bg-emerald-500" />
-                <span className="text-xs font-bold uppercase tracking-wide text-emerald-800">Selected CO:</span>
-                <span className="text-xs font-semibold text-emerald-900">PS {selectedPplaAssignPSRow.ps} &mdash; {selectedPplaAssignPSRow.shippingLine} &mdash; {selectedPplaAssignPSRow.pod} &mdash; {selectedPplaAssignPSRow.sku}</span>
-                <button
-                  type="button"
-                  className="ml-auto text-[10px] font-bold uppercase tracking-wider text-emerald-700 hover:text-emerald-900"
-                  onClick={() => setSelectedPplaAssignPSRow(null)}
-                >
-                  Clear
-                </button>
-              </div>
-            ) : (
-              <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
-                Click any row in the <span className="font-bold">Assign PS</span> tab to filter records by cutting order.
-              </div>
-            )}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="p-6 border-b flex justify-between items-center">
-                <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">RECENT CUTTING ORDERS</h3>
-              </div>
-              <datalist id="ppla-alloc-booking-options">
-                {bookingNumberOptions.map((bookingNumber) => (
-                  <option key={bookingNumber} value={bookingNumber} />
-                ))}
-              </datalist>
-              <datalist id="ppla-alloc-container-options">
-                {containerNumberOptions.map((containerNo) => (
-                  <option key={containerNo} value={containerNo} />
-                ))}
-              </datalist>
-              <Table>
-                <TableHeader className="bg-gray-50/50">
-                  <TableRow>
-                    <TableHead className="w-12 text-center">
-                      <Checkbox
-                        checked={
-                          allFilteredCuttingOrdersSelected
-                            ? true
-                            : someFilteredCuttingOrdersSelected
-                              ? 'indeterminate'
-                              : false
-                        }
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            setSelectedCuttingOrderKeys(filteredCuttingOrderRows.map((row) => cuttingOrderRowKey(row)));
-                          } else {
-                            setSelectedCuttingOrderKeys([]);
-                          }
-                        }}
-                      />
-                    </TableHead>
-                    <TableHead className="text-[9px] font-black uppercase text-gray-400">PS</TableHead>
-                    <TableHead className="text-[9px] font-black uppercase text-gray-400">Shipping Line</TableHead>
-                    <TableHead className="text-[9px] font-black uppercase text-gray-400">Booking No</TableHead>
-                    <TableHead className="text-[9px] font-black uppercase text-gray-400">Container No</TableHead>
-                    <TableHead className="text-[9px] font-black uppercase text-gray-400">ATW Status</TableHead>
-                    <TableHead className="text-[9px] font-black uppercase text-gray-400">POD</TableHead>
-                    <TableHead className="text-[9px] font-black uppercase text-gray-400">Cut-Off Date</TableHead>
-                    <TableHead className="text-[9px] font-black uppercase text-gray-400">ETD</TableHead>
-                    <TableHead className="text-[9px] font-black uppercase text-gray-400">Task Date</TableHead>
-                    <TableHead className="text-[9px] font-black uppercase text-gray-400">SKU</TableHead>
-                    <TableHead className="text-[9px] font-black uppercase text-gray-400">Palletization</TableHead>
-                    <TableHead className="text-[9px] font-black uppercase text-right text-gray-400">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pplaAllocationPageRows.length > 0 ? pplaAllocationPageRows.map((row) => (
-                    <TableRow key={`${row.contractId}-${row.id}`} className="h-16 hover:bg-gray-50/50">
-                      <TableCell className="text-center">
-                        <Checkbox
-                          checked={selectedCuttingOrderKeys.includes(cuttingOrderRowKey(row))}
-                          onCheckedChange={(checked) => {
-                            setSelectedCuttingOrderKeys((current) =>
-                              checked
-                                ? [...new Set([...current, cuttingOrderRowKey(row)])]
-                                : current.filter((key) => key !== cuttingOrderRowKey(row))
-                            );
-                          }}
-                        />
-                      </TableCell>
-                      <TableCell className="font-bold text-xs">{row.ps}</TableCell>
-                      <TableCell className="text-xs font-bold uppercase">{row.shippingLine}</TableCell>
-                      <TableCell className="text-xs text-gray-500 font-semibold">
-                        <Select
-                          value={row.bookingNo && row.bookingNo !== '--' ? row.bookingNo : '__none'}
-                          onValueChange={(value) => {
-                            handleInlineCuttingOrderRowUpdate(row, { bookingNo: value === '__none' ? '--' : value });
-                          }}
-                        >
-                          <SelectTrigger className="h-8 min-w-[170px]" onClick={(event) => event.stopPropagation()}>
-                            <SelectValue placeholder="Select booking no" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__none">Unassigned</SelectItem>
-                            {laLBoundBookingNumbers.map((bookingNo) => (
-                              <SelectItem key={bookingNo} value={bookingNo}>{bookingNo}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell className="font-bold text-xs">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="h-8 min-w-[170px] justify-start px-3 text-xs font-medium"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            openPplaContainerModal(row);
-                          }}
-                        >
-                          {row.containerNo && row.containerNo !== '--' ? row.containerNo : 'Bind Container'}
-                        </Button>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            'font-bold uppercase tracking-wider text-[10px]',
-                            row.atwStatus === 'PENDING'
-                              ? 'border-red-200 bg-red-50 text-red-600'
-                              : row.atwStatus === 'READY'
-                                ? 'border-amber-200 bg-amber-50 text-amber-600'
-                                : row.atwStatus === 'LOADED' || row.atwStatus === 'AVAILABLE'
-                                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                                  : 'border-slate-200 bg-slate-50 text-slate-600'
-                          )}
-                        >
-                          {row.atwStatus}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-xs uppercase">{row.pod}</TableCell>
-                      <TableCell className="text-xs text-gray-500">{row.cutOffDate}</TableCell>
-                      <TableCell className="text-xs text-gray-500">{row.etd}</TableCell>
-                      <TableCell className="text-xs text-gray-500">{row.taskDate || '--'}</TableCell>
-                      <TableCell className="text-xs font-bold">{row.sku}</TableCell>
-                      <TableCell className="text-xs">{row.palletization}</TableCell>
-                      {/* <TableCell className="text-center">
-                        <Select
-                          value={normalizeCuttingOrderStatus(row.status)}
-                          onValueChange={(value) => handleUpdateCuttingOrderStatus(row, value as CuttingOrderStatus)}
-                        >
-                          <SelectTrigger
-                            className={cn(
-                              'h-8 w-[130px] rounded-full border px-3 text-[10px] font-bold uppercase tracking-wider shadow-sm',
-                              getCuttingOrderStatusClassName(normalizeCuttingOrderStatus(row.status))
-                            )}
-                          >
-                            <SelectValue placeholder="Select Status" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="EMPTY">Empty</SelectItem>
-                            <SelectItem value="PENDING">Pending</SelectItem>
-                            <SelectItem value="ONGOING">Ongoing</SelectItem>
-                            <SelectItem value="DEPART">Depart</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </TableCell> */}
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="text-gray-400">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-52">
-                            <DropdownMenuItem
-                              className="gap-3 py-2.5 cursor-pointer font-medium"
-                              onClick={() => openEditCuttingOrderModal(row)}
-                            >
-                              <FileText className="h-4 w-4 text-gray-500" /> Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="gap-3 py-2.5 cursor-pointer font-medium"
-                              onClick={() => setIsComingSoonModalOpen(true)}
-                            >
-                              <Check className="h-4 w-4 text-gray-500" /> Enroute PS
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  )) : (
-                    <TableRow>
-                      <TableCell colSpan={14} className="h-56 text-center text-sm text-slate-500">
-                        No cutting orders found for the current filters.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-              <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-xs text-slate-600">
-                <span>
-                  Showing {pplaAllocationPageRows.length} of {pplaAllocationRows.length} rows
-                </span>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 px-3"
-                    disabled={pplaAllocationsPage <= 1}
-                    onClick={() => setPplaAllocationsPage((prev) => Math.max(1, prev - 1))}
-                  >
-                    Previous
-                  </Button>
-                  <span className="min-w-[80px] text-center font-semibold text-slate-700">
-                    {pplaAllocationsPage} / {pplaAllocationsTotalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 px-3"
-                    disabled={pplaAllocationsPage >= pplaAllocationsTotalPages}
-                    onClick={() => setPplaAllocationsPage((prev) => Math.min(pplaAllocationsTotalPages, prev + 1))}
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </TabsContent>
-        </Tabs>
-      </div>
-
-      <Dialog
-        open={isPplaBookingsModalOpen}
-        onOpenChange={(open) => {
-          setIsPplaBookingsModalOpen(open);
-          if (!open) {
-            setSelectedPplaLARowForBookings(null);
-            setPplaBookingModalTab('add-new');
-            setIsPplaAddBookingFormOpen(false);
-            setSelectedPplaBookingForEdit(null);
-            setSelectedPplaExistingBookingKeys([]);
-            setPplaNewBookingDraft({
-              bookingNumber: '',
-              shippingLine: '',
-              vesselName: '',
-              pod: '',
-              attachmentUrls: [],
-              containersConfirmed: 0,
-            });
-            setPplaEditBookingDraft({
-              bookingNumber: '',
-              shippingLine: '',
-              vesselName: '',
-              pod: '',
-              attachmentUrls: [],
-              containersConfirmed: 0,
-            });
-          }
-        }}
-      >
-        <DialogContent className="max-w-4xl p-0 max-h-[90vh] overflow-y-auto bg-white border-none shadow-2xl flex flex-col">
-          <div className="p-6 border-b flex justify-between items-center sticky top-0 bg-white z-10">
-            <DialogTitle className="text-xl font-bold text-gray-900 tracking-tight">Associated Bookings</DialogTitle>
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400" onClick={() => setIsPplaBookingsModalOpen(false)}>
-              <X className="h-5 w-5" />
-            </Button>
-          </div>
-          <div className="px-6 pt-4 text-xs text-slate-500">
-            LA: <span className="font-semibold text-slate-800">{selectedPplaLARowForBookings?.contractId || '--'}</span>
-          </div>
-          <div className="p-6">
-            <div className="overflow-x-auto mb-6">
-              <Table>
-                  <TableHeader className="bg-gray-50/60">
-                    <TableRow>
-                      <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Booking No.</TableHead>
-                      <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Shipping Line</TableHead>
-                      <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Vessel/Voyage No</TableHead>
-                      <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">POP</TableHead>
-                      <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Attachment</TableHead>
-                      <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Containers Confirmed</TableHead>
-                      <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Week No.</TableHead>
-                      <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-right text-slate-500">Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pplaAssociatedBookings.length > 0 ? (
-                      pplaAssociatedBookings.map((booking) => (
-                        <TableRow key={`${booking.batchId}-${booking.id}`}>
-                          <TableCell className="text-sm font-semibold text-slate-900">{booking.bookingNumber}</TableCell>
-                          <TableCell className="text-sm text-slate-700">{booking.shippingLine}</TableCell>
-                          <TableCell className="text-sm text-slate-700">{booking.vesselName}</TableCell>
-                          <TableCell className="text-sm text-slate-700">{booking.pod || '--'}</TableCell>
-                          <TableCell className="text-sm text-slate-700">{booking.attachmentUrls?.length > 0 ? `${booking.attachmentUrls.length} file(s)` : '--'}</TableCell>
-                          <TableCell className="text-sm text-slate-700">{booking.containersConfirmed ?? 0}</TableCell>
-                          <TableCell className="text-sm text-slate-700">{booking.weekNumber}</TableCell>
-                          <TableCell className="text-right space-x-2 flex justify-end">
-                            <Button
-                              variant="outline"
-                              className="h-8 px-3 text-[10px] font-bold uppercase tracking-[0.14em]"
-                              onClick={() => {
-                                // Find and set the corresponding LA for this booking
-                                const correspondingLA = loadingAdviceRows.find((row) => row.id === booking.laId);
-                                setSelectedPplaBookingForEdit(booking);
-                                setSelectedPplaLARowForBookings(correspondingLA || null);
-                                setPplaEditBookingDraft({
-                                  bookingNumber: booking.bookingNumber === '--' ? '' : booking.bookingNumber,
-                                  shippingLine: booking.shippingLine,
-                                  vesselName: booking.vesselName,
-                                  pod: booking.pod,
-                                  attachmentUrls: booking.attachmentUrls || [],
-                                  containersConfirmed: booking.containersConfirmed,
-                                });
-                                setPplaBookingModalTab('edit-booking');
-                              }}
-                            >
-                              Edit
-                            </Button>
-                            <Button
-                              variant="outline"
-                              className="h-8 px-3 text-[10px] font-bold uppercase tracking-[0.14em]"
-                              onClick={() => handleDetachPplaBooking(booking)}
-                            >
-                              Detach
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={8} className="h-40 text-center text-sm text-slate-500">
-                          No bookings are bound to this loading advice yet.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-
-              <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50/60 flex-1 overflow-hidden flex flex-col">
-                <Tabs value={pplaBookingModalTab} onValueChange={(value) => setPplaBookingModalTab(value as PplaBookingModalTab)} className="flex flex-col">
-                  <div className="border-b border-slate-200 px-4 pt-4">
-                    <TabsList className="bg-transparent p-0 h-auto gap-6">
-                      <TabsTrigger  value="add-new" className="rounded-none border-b-2 border-transparent px-0 py-2 text-xs font-bold uppercase tracking-[0.16em] data-[state=active]:border-anflocor-green data-[state=active]:bg-transparent">Add New Booking</TabsTrigger>
-                      <TabsTrigger value="bind-existing" className="rounded-none border-b-2 border-transparent px-0 py-2 text-xs font-bold uppercase tracking-[0.16em] data-[state=active]:border-anflocor-green data-[state=active]:bg-transparent">Bind Existing Bookings</TabsTrigger>
-                      <TabsTrigger value="edit-booking" className="rounded-none border-b-2 border-transparent px-0 py-2 text-xs font-bold uppercase tracking-[0.16em] data-[state=active]:border-anflocor-green data-[state=active]:bg-transparent">Edit Booking</TabsTrigger>
-                    </TabsList>
-                  </div>
-
-                  <TabsContent value="add-new" className="m-0 p-4 space-y-4">
-                    <button
-                      type="button"
-                      className="w-full rounded-md border border-dashed border-slate-300 bg-white px-4 py-3 text-left text-xs font-bold uppercase tracking-[0.14em] text-slate-600 hover:bg-slate-50"
-                      onClick={() => setIsPplaAddBookingFormOpen((current) => !current)}
-                    >
-                      <Plus className="mr-2 inline h-4 w-4" /> Add Booking Row
-                    </button>
-
-                    {isPplaAddBookingFormOpen && (
-                      <div className="rounded-md border bg-white p-4">
-                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                          <div className="space-y-1">
-                            <Label className="text-[10px] font-bold uppercase text-slate-500">Booking No</Label>
-                            <Input value={pplaNewBookingDraft.bookingNumber} onChange={(e) => setPplaNewBookingDraft((current) => ({ ...current, bookingNumber: e.target.value }))} />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-[10px] font-bold uppercase text-slate-500">Shipping Line</Label>
-                            <Input value={pplaNewBookingDraft.shippingLine} onChange={(e) => setPplaNewBookingDraft((current) => ({ ...current, shippingLine: e.target.value }))} />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-[10px] font-bold uppercase text-slate-500">Vessel</Label>
-                            <Input value={pplaNewBookingDraft.vesselName} onChange={(e) => setPplaNewBookingDraft((current) => ({ ...current, vesselName: e.target.value }))} />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-[10px] font-bold uppercase text-slate-500">POD</Label>
-                            <Input value={pplaNewBookingDraft.pod} onChange={(e) => setPplaNewBookingDraft((current) => ({ ...current, pod: e.target.value }))} />
-                          </div>
-                          <div className="space-y-1 md:col-span-2">
-                            <Label className="text-[10px] font-bold uppercase text-slate-500">Attachments ({pplaBookingAttachmentFiles?.length || 0}/2)</Label>
-                            <input
-                              type="file"
-                              multiple
-                              accept="image/*,.pdf,.doc,.docx"
-                              className="hidden"
-                              ref={pplaBookingAttachmentInputRef}
-                              onChange={(e) => {
-                                const files = Array.from(e.target.files || []);
-                                const totalFiles = (pplaBookingAttachmentFiles?.length || 0) + files.length;
-                                if (totalFiles > 2) {
-                                  alert('Maximum 2 files allowed');
-                                  return;
-                                }
-                                setPplaBookingAttachmentFiles((current) => [...(current || []), ...files]);
-                              }}
-                            />
-                            <div className="flex flex-col gap-2">
-                              {(pplaBookingAttachmentFiles?.length || 0) < 2 && (
-                                <button
-                                  type="button"
-                                  className="w-full rounded-md border border-dashed border-slate-300 bg-white px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.14em] text-slate-600 hover:bg-slate-50"
-                                  onClick={() => pplaBookingAttachmentInputRef.current?.click()}
-                                >
-                                  + Click to Add Files
-                                </button>
-                              )}
-                              {pplaBookingAttachmentFiles && pplaBookingAttachmentFiles.length > 0 && (
-                                <div className="grid grid-cols-3 gap-2 max-h-[150px] overflow-y-auto">
-                                  {pplaBookingAttachmentFiles.map((file, index) => (
-                                    <div key={index} className="relative group">
-                                      <div className="aspect-square rounded-md border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden">
-                                        {file.type.startsWith('image/') ? (
-                                          <img src={URL.createObjectURL(file)} alt={file.name} className="w-full h-full object-cover" />
-                                        ) : (
-                                          <div className="text-center text-[10px] font-bold text-slate-500 p-1 break-all">{file.name.split('.').pop()?.toUpperCase()}</div>
-                                        )}
-                                      </div>
-                                      <button
-                                        type="button"
-                                        onClick={() => setPplaBookingAttachmentFiles((current) => current?.filter((_, i) => i !== index))}
-                                        className="absolute top-0 right-0 bg-red-500 text-white rounded-full h-5 w-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold"
-                                      >
-                                        ×
-                                      </button>
-                                      <div className="text-[8px] text-slate-600 truncate mt-1">{file.name}</div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          <div className="space-y-1 md:col-span-2">
-                            <Label className="text-[10px] font-bold uppercase text-slate-500">Containers Confirmed</Label>
-                            <Input
-                              type="number"
-                              min={0}
-                              value={pplaNewBookingDraft.containersConfirmed}
-                              onChange={(e) =>
-                                setPplaNewBookingDraft((current) => ({
-                                  ...current,
-                                  containersConfirmed: Math.max(0, Number(e.target.value || 0)),
-                                }))
-                              }
-                            />
-                          </div>
-                        </div>
-                        <div className="mt-4 flex justify-end">
-                          <Button className="bg-anflocor-green text-white hover:bg-anflocor-green/90" onClick={handleCreatePplaBooking}>Submit</Button>
-                        </div>
-                      </div>
-                    )}
-                  </TabsContent>
-
-                  <TabsContent value="bind-existing" className="m-0 p-4 space-y-3">
-                    <div className="flex justify-end">
-                      <Button className="bg-anflocor-green text-white hover:bg-anflocor-green/90" onClick={handleBindExistingPplaBookings}>Save</Button>
-                    </div>
-                    <div className="rounded-md border bg-white overflow-hidden overflow-y-auto max-h-[400px]">
-                      <Table>
-                        <TableHeader className="bg-slate-100/80">
-                          <TableRow>
-                            <TableHead className="w-12 text-center text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500"> </TableHead>
-                            <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Booking No</TableHead>
-                            <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Shipping Line</TableHead>
-                            <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">POD</TableHead>
-                            <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Attachment</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {pplaExistingBookingsToBind.length > 0 ? (
-                            pplaExistingBookingsToBind.map((booking) => (
-                              <TableRow key={pplaExistingBookingKey(booking)}>
-                                <TableCell className="text-center">
-                                  <Checkbox
-                                    checked={selectedPplaExistingBookingKeys.includes(pplaExistingBookingKey(booking))}
-                                    onCheckedChange={(checked) => {
-                                      const key = pplaExistingBookingKey(booking);
-                                      setSelectedPplaExistingBookingKeys((current) =>
-                                        checked
-                                          ? [...new Set([...current, key])]
-                                          : current.filter((item) => item !== key)
-                                      );
-                                    }}
-                                  />
-                                </TableCell>
-                                <TableCell className="text-sm font-semibold text-slate-900">{booking.bookingNumber}</TableCell>
-                                <TableCell className="text-sm text-slate-700">{booking.shippingLine}</TableCell>
-                                <TableCell className="text-sm text-slate-700">{booking.pod}</TableCell>
-                                <TableCell className="text-sm text-slate-700">{booking.attachmentUrls?.length > 0 ? `${booking.attachmentUrls.length} file(s)` : '--'}</TableCell>
-                              </TableRow>
-                            ))
-                          ) : (
-                            <TableRow>
-                              <TableCell colSpan={5} className="h-28 text-center text-sm text-slate-500">
-                                No existing bookings available to bind.
-                              </TableCell>
-                            </TableRow>
-                          )}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="edit-booking" className="m-0 p-4 space-y-4">
-                    {selectedPplaBookingForEdit ? (
-                      <div>
-                        <div className="mb-4">
-                          <h3 className="text-sm font-semibold text-slate-700 mb-2">Editing Booking</h3>
-                          <p className="text-xs text-slate-500">Current Status: <Badge className="ml-2" variant={selectedPplaBookingForEdit.bookingStatus === 'Booking Confirmed' ? 'default' : 'secondary'}>{selectedPplaBookingForEdit.bookingStatus || 'Booking Created'}</Badge></p>
-                        </div>
-                        <div className="rounded-md border bg-white p-4">
-                          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                            <div className="space-y-1">
-                              <Label className="text-[10px] font-bold uppercase text-slate-500">Booking No (leave empty if not yet assigned)</Label>
-                              <Input value={pplaEditBookingDraft.bookingNumber} onChange={(e) => setPplaEditBookingDraft((current) => ({ ...current, bookingNumber: e.target.value }))} />
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-[10px] font-bold uppercase text-slate-500">Shipping Line</Label>
-                              <Input value={pplaEditBookingDraft.shippingLine} onChange={(e) => setPplaEditBookingDraft((current) => ({ ...current, shippingLine: e.target.value }))} />
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-[10px] font-bold uppercase text-slate-500">Vessel</Label>
-                              <Input value={pplaEditBookingDraft.vesselName} onChange={(e) => setPplaEditBookingDraft((current) => ({ ...current, vesselName: e.target.value }))} />
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-[10px] font-bold uppercase text-slate-500">POD</Label>
-                              <Input value={pplaEditBookingDraft.pod} onChange={(e) => setPplaEditBookingDraft((current) => ({ ...current, pod: e.target.value }))} />
-                            </div>
-                            <div className="space-y-1 md:col-span-2">
-                              <Label className="text-[10px] font-bold uppercase text-slate-500">Attachments ({(pplaEditBookingDraft.attachmentUrls?.length || 0) + (pplaEditBookingAttachmentFiles?.length || 0)}/2)</Label>
-                              <input
-                                type="file"
-                                multiple
-                                accept="image/*,.pdf,.doc,.docx"
-                                className="hidden"
-                                ref={pplaEditBookingAttachmentInputRef}
-                                onChange={(e) => {
-                                  const files = Array.from(e.target.files || []);
-                                  const totalFiles = (pplaEditBookingDraft.attachmentUrls?.length || 0) + (pplaEditBookingAttachmentFiles?.length || 0) + files.length;
-                                  if (totalFiles > 2) {
-                                    alert('Maximum 2 files allowed');
-                                    return;
-                                  }
-                                  setPplaEditBookingAttachmentFiles((current) => [...(current || []), ...files]);
-                                }}
-                              />
-                              <div className="flex flex-col gap-2">
-                                {((pplaEditBookingDraft.attachmentUrls?.length || 0) + (pplaEditBookingAttachmentFiles?.length || 0)) < 2 && (
-                                  <button
-                                    type="button"
-                                    className="w-full rounded-md border border-dashed border-slate-300 bg-white px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.14em] text-slate-600 hover:bg-slate-50"
-                                    onClick={() => pplaEditBookingAttachmentInputRef.current?.click()}
-                                  >
-                                    + Click to Add Files
-                                  </button>
-                                )}
-                                {((pplaEditBookingDraft.attachmentUrls?.length || 0) > 0 || (pplaEditBookingAttachmentFiles?.length || 0) > 0) && (
-                                  <div className="grid grid-cols-3 gap-2 max-h-[150px] overflow-y-auto">
-                                    {pplaEditBookingDraft.attachmentUrls?.map((url, index) => (
-                                      <div key={`existing-${index}`} className="relative group">
-                                        <div className="aspect-square rounded-md border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden">
-                                          {url.startsWith('data:image') ? (
-                                            <img src={url} alt={`existing-${index}`} className="w-full h-full object-cover" />
-                                          ) : (
-                                            <div className="text-center text-[10px] font-bold text-slate-500 p-1">FILE</div>
-                                          )}
-                                        </div>
-                                        <button
-                                          type="button"
-                                          onClick={() => setPplaEditBookingDraft((current) => ({
-                                            ...current,
-                                            attachmentUrls: (current.attachmentUrls || []).filter((_, i) => i !== index),
-                                          }))}
-                                          className="absolute top-0 right-0 bg-red-500 text-white rounded-full h-5 w-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold"
-                                        >
-                                          ×
-                                        </button>
-                                        <div className="text-[8px] text-slate-600 truncate mt-1">existing</div>
-                                      </div>
-                                    ))}
-                                    {pplaEditBookingAttachmentFiles?.map((file, index) => (
-                                      <div key={`new-${index}`} className="relative group">
-                                        <div className="aspect-square rounded-md border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden">
-                                          {file.type.startsWith('image/') ? (
-                                            <img src={URL.createObjectURL(file)} alt={file.name} className="w-full h-full object-cover" />
-                                          ) : (
-                                            <div className="text-center text-[10px] font-bold text-slate-500 p-1 break-all">{file.name.split('.').pop()?.toUpperCase()}</div>
-                                          )}
-                                        </div>
-                                        <button
-                                          type="button"
-                                          onClick={() => setPplaEditBookingAttachmentFiles((current) => current?.filter((_, i) => i !== index))}
-                                          className="absolute top-0 right-0 bg-red-500 text-white rounded-full h-5 w-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold"
-                                        >
-                                          ×
-                                        </button>
-                                        <div className="text-[8px] text-slate-600 truncate mt-1">{file.name}</div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                            <div className="space-y-1 md:col-span-2">
-                              <Label className="text-[10px] font-bold uppercase text-slate-500">Containers Confirmed</Label>
-                              <Input
-                                type="number"
-                                min={0}
-                                value={pplaEditBookingDraft.containersConfirmed}
-                                onChange={(e) =>
-                                  setPplaEditBookingDraft((current) => ({
-                                    ...current,
-                                    containersConfirmed: Math.max(0, Number(e.target.value || 0)),
-                                  }))
-                                }
-                              />
-                            </div>
-                          </div>
-                          <div className="mt-4 flex justify-end gap-2">
-                            <Button variant="outline" onClick={() => { setSelectedPplaBookingForEdit(null); setPplaBookingModalTab('bind-existing'); }}>Cancel</Button>
-                            <Button className="bg-anflocor-green text-white hover:bg-anflocor-green/90" onClick={handleEditPplaBooking}>Update Booking</Button>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="h-40 text-center text-sm text-slate-500 flex items-center justify-center">
-                        Select an Edit button from a booking row to edit it here.
-                      </div>
-                    )}
-                  </TabsContent>
-                </Tabs>
-              </div>
-            </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={isPplaContainerModalOpen}
-        onOpenChange={(open) => {
-          setIsPplaContainerModalOpen(open);
-          if (!open) {
-            setSelectedPplaAllocationRowForContainer(null);
-            setPplaContainerModalTab('add-new');
-            setSelectedPplaExistingContainerKey('');
-            setPplaNewContainerDraft({
-              containerNo: '',
-              vanNo: '',
-              sealNo: '',
-              atwStatus: 'Y',
-              atwReleased: format(new Date(), 'yyyy-MM-dd'),
-              pmNo: '',
-              driverName: '',
-              dateWithdrawn: format(new Date(), 'yyyy-MM-dd'),
-            });
-          }
-        }}
-      >
-        <DialogContent className="max-w-5xl p-0 max-h-[90vh] overflow-y-auto bg-white border-none shadow-2xl flex flex-col">
-          <div className="p-6 border-b flex justify-between items-center sticky top-0 bg-white z-10">
-            <DialogTitle className="text-xl font-bold text-gray-900 tracking-tight">Bind Container</DialogTitle>
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400" onClick={() => setIsPplaContainerModalOpen(false)}>
-              <X className="h-5 w-5" />
-            </Button>
-          </div>
-          <div className="px-6 pt-4 text-xs text-slate-500">
-            CO: <span className="font-semibold text-slate-800">{selectedPplaAllocationRowForContainer?.id || '--'}</span>
-          </div>
-          <div className="p-6">
-            <Table>
-              <TableHeader className="bg-gray-50/60">
-                <TableRow>
-                  <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Container No.</TableHead>
-                  <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Seal No.</TableHead>
-                  <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">ATW Status</TableHead>
-                  <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">ATW Released</TableHead>
-                  <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">PM No.</TableHead>
-                  <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Driver</TableHead>
-                  <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Date Withdrawn</TableHead>
-                  <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-right text-slate-500">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pplaCurrentBoundContainer ? (
-                  <TableRow>
-                    <TableCell className="text-sm font-semibold text-slate-900">{pplaCurrentBoundContainer.containerNo}</TableCell>
-                    <TableCell className="text-sm text-slate-700">{pplaCurrentBoundContainer.sealNo || '--'}</TableCell>
-                    <TableCell className="text-sm text-slate-700">{pplaCurrentBoundContainer.atwStatus || '--'}</TableCell>
-                    <TableCell className="text-sm text-slate-700">{pplaCurrentBoundContainer.atwReleased || '--'}</TableCell>
-                    <TableCell className="text-sm text-slate-700">{pplaCurrentBoundContainer.pmNo || '--'}</TableCell>
-                    <TableCell className="text-sm text-slate-700">{pplaCurrentBoundContainer.driverName || '--'}</TableCell>
-                    <TableCell className="text-sm text-slate-700">{pplaCurrentBoundContainer.dateWithdrawn || '--'}</TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="outline"
-                        className="h-8 px-3 text-[10px] font-bold uppercase tracking-[0.14em]"
-                        onClick={handleDetachPplaContainer}
-                      >
-                        Detach
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={9} className="h-28 text-center text-sm text-slate-500">
-                      No container is currently bound to this CO.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-
-            <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50/60">
-              <Tabs value={pplaContainerModalTab} onValueChange={(value) => setPplaContainerModalTab(value as PplaContainerModalTab)}>
-                <div className="border-b border-slate-200 px-4 pt-4">
-                  <TabsList className="bg-transparent p-0 h-auto gap-6">
-                    <TabsTrigger value="add-new" className="rounded-none border-b-2 border-transparent px-0 py-2 text-xs font-bold uppercase tracking-[0.16em] data-[state=active]:border-anflocor-green data-[state=active]:bg-transparent">Add Container</TabsTrigger>
-                    <TabsTrigger value="bind-existing" className="rounded-none border-b-2 border-transparent px-0 py-2 text-xs font-bold uppercase tracking-[0.16em] data-[state=active]:border-anflocor-green data-[state=active]:bg-transparent">Bind Existing Containers</TabsTrigger>
-                  </TabsList>
-                </div>
-
-                <TabsContent value="add-new" className="m-0 p-4 space-y-4">
-                  <div className="rounded-md border bg-white p-4">
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-bold uppercase text-slate-500">Container No</Label>
-                        <Input value={pplaNewContainerDraft.containerNo} onChange={(e) => setPplaNewContainerDraft((current) => ({ ...current, containerNo: e.target.value }))} />
-                      </div>
-
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-bold uppercase text-slate-500">Seal No</Label>
-                        <Input value={pplaNewContainerDraft.sealNo} onChange={(e) => setPplaNewContainerDraft((current) => ({ ...current, sealNo: e.target.value }))} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-bold uppercase text-slate-500">ATW Status</Label>
-                        <Select value={pplaNewContainerDraft.atwStatus} onValueChange={(value) => setPplaNewContainerDraft((current) => ({ ...current, atwStatus: value as 'Y' | 'N' }))}>
-                          <SelectTrigger className="h-10"><SelectValue placeholder="ATW Status" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Y">Y</SelectItem>
-                            <SelectItem value="N">N</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-bold uppercase text-slate-500">ATW Released</Label>
-                        <Input type="date" value={pplaNewContainerDraft.atwReleased} onChange={(e) => setPplaNewContainerDraft((current) => ({ ...current, atwReleased: e.target.value }))} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-bold uppercase text-slate-500">PM No</Label>
-                        <Input value={pplaNewContainerDraft.pmNo} onChange={(e) => setPplaNewContainerDraft((current) => ({ ...current, pmNo: e.target.value }))} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-bold uppercase text-slate-500">Driver</Label>
-                        <Input value={pplaNewContainerDraft.driverName} onChange={(e) => setPplaNewContainerDraft((current) => ({ ...current, driverName: e.target.value }))} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-bold uppercase text-slate-500">Date Withdrawn</Label>
-                        <Input type="date" value={pplaNewContainerDraft.dateWithdrawn} onChange={(e) => setPplaNewContainerDraft((current) => ({ ...current, dateWithdrawn: e.target.value }))} />
-                      </div>
-                    </div>
-                    <div className="mt-4 flex justify-end">
-                      <Button className="bg-anflocor-green text-white hover:bg-anflocor-green/90" onClick={handleCreateAndBindPplaContainer}>Add & Bind</Button>
-                    </div>
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="bind-existing" className="m-0 p-4 space-y-3">
-                  <div className="flex justify-end">
-                    <Button className="bg-anflocor-green text-white hover:bg-anflocor-green/90" onClick={handleBindExistingPplaContainer}>Save</Button>
-                  </div>
-                  <div className="rounded-md border bg-white overflow-hidden">
-                    <Table>
-                      <TableHeader className="bg-slate-100/80">
-                        <TableRow>
-                          <TableHead className="w-12 text-center text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500"> </TableHead>
-                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Container No</TableHead>
-                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Seal No</TableHead>
-                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Driver</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {pplaContainerRegistryRows.length > 0 ? (
-                          pplaContainerRegistryRows.map((container) => (
-                            <TableRow key={container.id}>
-                              <TableCell className="text-center">
-                                <Checkbox
-                                  checked={selectedPplaExistingContainerKey === container.id}
-                                  onCheckedChange={(checked) => {
-                                    setSelectedPplaExistingContainerKey(checked ? container.id : '');
-                                  }}
-                                />
-                              </TableCell>
-                              <TableCell className="text-sm font-semibold text-slate-900">{container.containerNo}</TableCell>
-                              <TableCell className="text-sm text-slate-700">{container.sealNo || '--'}</TableCell>
-                              <TableCell className="text-sm text-slate-700">{container.driverName || '--'}</TableCell>
-                            </TableRow>
-                          ))
-                        ) : (
-                          <TableRow>
-                            <TableCell colSpan={4} className="h-28 text-center text-sm text-slate-500">
-                              No system containers found.
-                            </TableCell>
-                          </TableRow>
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </TabsContent>
-              </Tabs>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-    </div>
-  );
-
   const renderContent = () => {
     if (activeView === 'dashboard') {
       return (
@@ -6465,391 +3895,8 @@ console.log(`hex: `, customerMappings)
     if (activeView === 'cutting-order') return renderCuttingOrdersView();
     if (activeView === 'bookings') return renderBookingsView();
     if (activeView === 'trips') return renderTripsView();
-    if (activeView === 'ppla') return renderPPLAView();
-    if (activeView === 'configuration') return renderConfigurationView();
     return <div className="p-12 text-center text-gray-400">View implementation pending.</div>;
   };
-
-  const renderConfigurationView = () => (
-    <div className="min-h-[calc(100vh-4rem)] bg-[#f3f5f9] -m-8 p-4 md:p-6 lg:p-8 text-slate-900 animate-in fade-in duration-500">
-      <div className="mx-auto max-w-[1400px]">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center space-x-2">
-            <div className="h-8 w-1 bg-anflocor-green rounded-full" />
-            <h2 className="text-2xl font-bold text-gray-900">Master Data Management</h2>
-            <p className="text-xs text-slate-500 ml-2">Manage system-wide lookup values and global configurations.</p>
-          </div>
-          <div className="flex gap-2">
-            <input
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              className="hidden"
-              ref={configFileInputRef}
-              onChange={handleConfigImport}
-              disabled={isImportingConfig}
-            />
-            <Button
-              onClick={() => configFileInputRef.current?.click()}
-              disabled={isImportingConfig}
-              className="h-10 px-4 bg-slate-700 text-white text-xs font-bold uppercase tracking-widest hover:bg-slate-800 gap-2"
-            >
-              <Upload className="h-4 w-4" />
-              {isImportingConfig ? 'Importing...' : 'IMPORT'}
-            </Button>
-            <Button variant="outline" className="h-10 px-4 text-xs font-bold uppercase tracking-widest gap-2">
-              <RefreshCcw className="h-4 w-4" />
-              VIEW VERSION
-            </Button>
-          </div>
-        </div>
-
-        <div className="flex gap-6">
-          {/* Left Navigation */}
-          <div className="w-56 space-y-2 max-h-[75vh] overflow-y-auto">
-            <div className="text-xs font-bold uppercase tracking-widest text-slate-500 px-2 py-2 sticky top-0 bg-[#f3f5f9]">Available Configs</div>
-            
-            <button
-              onClick={() => setSelectedConfigType('pricing-condition')}
-              className={cn(
-                'w-full text-left px-4 py-3 text-sm font-bold uppercase tracking-wider transition-colors rounded-md',
-                selectedConfigType === 'pricing-condition'
-                  ? 'bg-anflocor-green text-white'
-                  : 'bg-white text-slate-900 hover:bg-slate-50 border border-slate-200'
-              )}
-            >
-              <DollarSign className="h-4 w-4 inline mr-2" />
-              <span className="flex flex-col">
-                <span>Pricing Condition</span>
-                <span className="text-xs font-normal opacity-75">Key-Value Pairs</span>
-              </span>
-            </button>
-
-            <button
-              onClick={() => setSelectedConfigType('incoterm')}
-              className={cn(
-                'w-full text-left px-4 py-3 text-sm font-bold uppercase tracking-wider transition-colors rounded-md',
-                selectedConfigType === 'incoterm'
-                  ? 'bg-anflocor-green text-white'
-                  : 'bg-white text-slate-900 hover:bg-slate-50 border border-slate-200'
-              )}
-            >
-              <Globe className="h-4 w-4 inline mr-2" />
-              <span className="flex flex-col">
-                <span>Incoterm</span>
-                <span className="text-xs font-normal opacity-75">Trade Terms</span>
-              </span>
-            </button>
-
-            <button
-              onClick={() => setSelectedConfigType('customer-mapping')}
-              className={cn(
-                'w-full text-left px-4 py-3 text-sm font-bold uppercase tracking-wider transition-colors rounded-md',
-                selectedConfigType === 'customer-mapping'
-                  ? 'bg-anflocor-green text-white'
-                  : 'bg-white text-slate-900 hover:bg-slate-50 border border-slate-200'
-              )}
-            >
-              <Users className="h-4 w-4 inline mr-2" />
-              <span className="flex flex-col">
-                <span>Customer Mapping</span>
-                <span className="text-xs font-normal opacity-75">Customer List</span>
-              </span>
-            </button>
-            
-            <button
-              onClick={() => setSelectedConfigType('pack-type')}
-              className={cn(
-                'w-full text-left px-4 py-3 text-sm font-bold uppercase tracking-wider transition-colors rounded-md',
-                selectedConfigType === 'pack-type'
-                  ? 'bg-anflocor-green text-white'
-                  : 'bg-white text-slate-900 hover:bg-slate-50 border border-slate-200'
-              )}
-            >
-              <Box className="h-4 w-4 inline mr-2" />
-              <span className="flex flex-col">
-                <span>Pack Type</span>
-                <span className="text-xs font-normal opacity-75">Material Mapping</span>
-              </span>
-            </button>
-
-            <button
-              onClick={() => setSelectedConfigType('shipping-lines')}
-              className={cn(
-                'w-full text-left px-4 py-3 text-sm font-bold uppercase tracking-wider transition-colors rounded-md',
-                selectedConfigType === 'shipping-lines'
-                  ? 'bg-anflocor-green text-white'
-                  : 'bg-white text-slate-900 hover:bg-slate-50 border border-slate-200'
-              )}
-            >
-              <Tag className="h-4 w-4 inline mr-2" />
-              <span className="flex flex-col">
-                <span>Brand Mapping</span>
-                <span className="text-xs font-normal opacity-75">Code & Description</span>
-              </span>
-            </button>
-            
-            <button
-              onClick={() => setSelectedConfigType('vessels')}
-              className={cn(
-                'w-full text-left px-4 py-3 text-sm font-bold uppercase tracking-wider transition-colors rounded-md',
-                selectedConfigType === 'vessels'
-                  ? 'bg-anflocor-green text-white'
-                  : 'bg-white text-slate-900 hover:bg-slate-50 border border-slate-200'
-              )}
-            >
-              <Building className="h-4 w-4 inline mr-2" />
-              <span className="flex flex-col">
-                <span>Profit Centers</span>
-                <span className="text-xs font-normal opacity-75">Plant Distribution</span>
-              </span>
-            </button>
-
-            <button
-              onClick={() => setSelectedConfigType('port-of-loading')}
-              className={cn(
-                'w-full text-left px-4 py-3 text-sm font-bold uppercase tracking-wider transition-colors rounded-md',
-                selectedConfigType === 'port-of-loading'
-                  ? 'bg-anflocor-green text-white'
-                  : 'bg-white text-slate-900 hover:bg-slate-50 border border-slate-200'
-              )}
-            >
-              <Anchor className="h-4 w-4 inline mr-2" />
-              <span className="flex flex-col">
-                <span>Port of Loading</span>
-                <span className="text-xs font-normal opacity-75">Singletons</span>
-              </span>
-            </button>
-
-            <button
-              onClick={() => setSelectedConfigType('port-of-destination')}
-              className={cn(
-                'w-full text-left px-4 py-3 text-sm font-bold uppercase tracking-wider transition-colors rounded-md',
-                selectedConfigType === 'port-of-destination'
-                  ? 'bg-anflocor-green text-white'
-                  : 'bg-white text-slate-900 hover:bg-slate-50 border border-slate-200'
-              )}
-            >
-              <Anchor className="h-4 w-4 inline mr-2" />
-              <span className="flex flex-col">
-                <span>Port of Destination</span>
-                <span className="text-xs font-normal opacity-75">Discharge Port</span>
-              </span>
-            </button>
-
-            <button
-              onClick={() => setSelectedConfigType('customer-to-packtype')}
-              className={cn(
-                'w-full text-left px-4 py-3 text-sm font-bold uppercase tracking-wider transition-colors rounded-md',
-                selectedConfigType === 'customer-to-packtype'
-                  ? 'bg-anflocor-green text-white'
-                  : 'bg-white text-slate-900 hover:bg-slate-50 border border-slate-200'
-              )}
-            >
-              <Link className="h-4 w-4 inline mr-2" />
-              <span className="flex flex-col">
-                <span>Customer to Pack</span>
-                <span className="text-xs font-normal opacity-75">Mapping Data</span>
-              </span>
-            </button>
-          </div>
-
-          {/* Right Content */}
-          <div className="flex-1">
-            <Card className="overflow-hidden border-slate-200 bg-white shadow-sm max-w-[60vw]">
-              <div className="border-b border-slate-200 bg-slate-50/50 px-6 py-4 flex items-center justify-between">
-                <h3 className="text-sm font-bold uppercase text-slate-700">
-                  {selectedConfigType === 'pricing-condition' && 'Pricing Condition'}
-                  {selectedConfigType === 'incoterm' && 'Incoterm'}
-                  {selectedConfigType === 'customer-mapping' && 'Customer Mapping'}
-                  {selectedConfigType === 'pack-type' && 'Pack Type (Material Mapping)'}
-                  {selectedConfigType === 'shipping-lines' && 'Brand Mapping'}
-                  {selectedConfigType === 'vessels' && 'Profit Center Mapping'}
-                  {selectedConfigType === 'port-of-loading' && 'Port of Loading (Singletons)'}
-                  {selectedConfigType === 'port-of-destination' && 'Port of Destination'}
-                  {selectedConfigType === 'customer-to-packtype' && 'Customer to Pack Type Mapping'}
-                </h3>
-                <div className="flex-1 max-w-xs">
-                  <Input
-                    placeholder={`Filter ${selectedConfigType}...`}
-                    className="h-8 text-xs"
-                  />
-                </div>
-              </div>
-
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      {selectedConfigType === 'pricing-condition' && (
-                        <>
-                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Key</TableHead>
-                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Value</TableHead>
-                        </>
-                      )}
-                      {selectedConfigType === 'incoterm' && (
-                        <>
-                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Key</TableHead>
-                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Value</TableHead>
-                        </>
-                      )}
-                      {selectedConfigType === 'customer-mapping' && customerMappingData.length > 0 && (
-                        <>
-                          {Object.keys(customerMappingData[0]).map((columnName) => (
-                            <TableHead key={columnName} className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                              {columnName}
-                            </TableHead>
-                          ))}
-                        </>
-                      )}
-                      {selectedConfigType === 'pack-type' && (
-                        <>
-                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Pack Type</TableHead>
-                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">SAP ID</TableHead>
-                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">SAP Code</TableHead>
-                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">SAP Desc</TableHead>
-                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Description</TableHead>
-                        </>
-                      )}
-                      {selectedConfigType === 'shipping-lines' && (
-                        <>
-                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Code</TableHead>
-                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Description</TableHead>
-                        </>
-                      )}
-                      {selectedConfigType === 'vessels' && (
-                        <>
-                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Plant</TableHead>
-                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">District</TableHead>
-                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Packing Houses</TableHead>
-                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Profit Center</TableHead>
-                        </>
-                      )}
-                      {selectedConfigType === 'port-of-loading' && portOfLoadings.length > 0 && (
-                        <>
-                          {Object.keys(portOfLoadings[0]).map((columnName) => (
-                            <TableHead key={columnName} className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                              {columnName}
-                            </TableHead>
-                          ))}
-                        </>
-                      )}
-                      {selectedConfigType === 'port-of-destination' && portOfDestinations.length > 0 && (
-                        <>
-                          {Object.keys(portOfDestinations[0]).map((columnName) => (
-                            <TableHead key={columnName} className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                              {columnName}
-                            </TableHead>
-                          ))}
-                        </>
-                      )}
-                      {selectedConfigType === 'customer-to-packtype' && customerToPackTypeData.length > 0 && (
-                        <>
-                          {Object.keys(customerToPackTypeData[0]).map((columnName) => (
-                            <TableHead key={columnName} className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                              {columnName}
-                            </TableHead>
-                          ))}
-                        </>
-                      )}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {selectedConfigType === 'pricing-condition' && pricingConditions.length > 0 ? (
-                      pricingConditions.map((item: any, index: number) => (
-                        <TableRow key={index}>
-                          <TableCell className="text-sm font-semibold text-slate-900">{item.Key || item['Key'] || '--'}</TableCell>
-                          <TableCell className="text-sm text-slate-700">{item.Value || item['Value'] || '--'}</TableCell>
-                        </TableRow>
-                      ))
-                    ) : selectedConfigType === 'incoterm' && incotermData.length > 0 ? (
-                      incotermData.map((item: any, index: number) => (
-                        <TableRow key={index}>
-                          <TableCell className="text-sm font-semibold text-slate-900">{item.Key || item['Key'] || '--'}</TableCell>
-                          <TableCell className="text-sm text-slate-700">{item.Value || item['Value'] || '--'}</TableCell>
-                        </TableRow>
-                      ))
-                    ) : selectedConfigType === 'customer-mapping' && customerMappingData.length > 0 ? (
-                      customerMappingData.map((item: any, index: number) => (
-                        <TableRow key={index}>
-                          {Object.keys(item).map((columnName) => (
-                            <TableCell key={`${index}-${columnName}`} className="text-sm text-slate-700">
-                              {item[columnName] || '--'}
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      ))
-                    ) : selectedConfigType === 'pack-type' && materialPackTypes.length > 0 ? (
-                      materialPackTypes.map((item: any, index: number) => (
-                        <TableRow key={index}>
-                          <TableCell className="text-sm font-semibold text-slate-900">{item['Pack Type'] || item.PackType || '--'}</TableCell>
-                          <TableCell className="text-sm text-slate-700">{item['SAPMPT_ID'] || item.SAPMPT_ID || '--'}</TableCell>
-                          <TableCell className="text-sm text-slate-700">{item['SAPC_Code'] || item.SAPC_Code || '--'}</TableCell>
-                          <TableCell className="text-sm text-slate-700">{item['SAPC_Desc'] || item.SAPC_Desc || '--'}</TableCell>
-                          <TableCell className="text-sm text-slate-700">{item.Description || item.description || '--'}</TableCell>
-                        </TableRow>
-                      ))
-                    ) : selectedConfigType === 'shipping-lines' && brandMappings.length > 0 ? (
-                      brandMappings.map((item: any, index: number) => (
-                        <TableRow key={index}>
-                          <TableCell className="text-sm font-semibold text-slate-900">{item.CODE || item['CODE'] || '--'}</TableCell>
-                          <TableCell className="text-sm text-slate-700">{item.DESCRIPTION || item['DESCRIPTION'] || '--'}</TableCell>
-                        </TableRow>
-                      ))
-                    ) : selectedConfigType === 'vessels' && profitCenters.length > 0 ? (
-                      profitCenters.map((item: any, index: number) => (
-                        <TableRow key={index}>
-                          <TableCell className="text-sm font-semibold text-slate-900">{item.PLANT || item['PLANT'] || '--'}</TableCell>
-                          <TableCell className="text-sm text-slate-700">{item.DISTRICT || item['DISTRICT'] || '--'}</TableCell>
-                          <TableCell className="text-sm text-slate-700">{item['PACKING HOUSES'] || item.PACKING_HOUSES || '--'}</TableCell>
-                          <TableCell className="text-sm text-slate-700">{item['PROFIT CENTER'] || item.PROFIT_CENTER || '--'}</TableCell>
-                        </TableRow>
-                      ))
-                    ) : selectedConfigType === 'port-of-loading' && portOfLoadings.length > 0 ? (
-                      portOfLoadings.map((item: any, index: number) => (
-                        <TableRow key={index}>
-                          {Object.keys(item).map((columnName) => (
-                            <TableCell key={`${index}-${columnName}`} className="text-sm text-slate-700">
-                              {item[columnName] || '--'}
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      ))
-                    ) : selectedConfigType === 'port-of-destination' && portOfDestinations.length > 0 ? (
-                      portOfDestinations.map((item: any, index: number) => (
-                        <TableRow key={index}>
-                          {Object.keys(item).map((columnName) => (
-                            <TableCell key={`${index}-${columnName}`} className="text-sm text-slate-700">
-                              {item[columnName] || '--'}
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      ))
-                    ) : selectedConfigType === 'customer-to-packtype' && customerToPackTypeData.length > 0 ? (
-                      customerToPackTypeData.map((item: any, index: number) => (
-                        <TableRow key={index}>
-                          {Object.keys(item).map((columnName) => (
-                            <TableCell key={`${index}-${columnName}`} className="text-sm text-slate-700">
-                              {item[columnName] || '--'}
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={10} className="h-24 text-center text-sm text-slate-500">
-                          No data found. Import Excel file to populate.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </Card>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 
   const renderLoadingAdviceView = () => (
     <div className="min-h-[calc(100vh-4rem)] bg-[#f3f5f9] -m-8 p-4 md:p-6 lg:p-8 text-slate-900 animate-in fade-in duration-500">
@@ -6863,24 +3910,29 @@ console.log(`hex: `, customerMappings)
               <SelectContent>
                 <SelectItem value="all">All Weeks</SelectItem>
                 {weekOptions.map((week) => (
-                  <SelectItem key={week.value} value={week.value}>
-                    {week.label}
+                  <SelectItem key={week} value={week}>
+                    {week}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          <SearchableCustomerDropdown
-            selectedCustomer={selectedCustomerObject}
-            customerMappings={customerMappings}
-            onSelectCustomer={(c) => {
-              setCustomerFilter(c ? c.Customer : 'all');
-              setSelectedCustomerObject(c);
-            }}
-            inputClassName="h-10 rounded-sm border-slate-300 bg-white text-sm shadow-sm"
-            containerClassName="min-w-[220px] flex-1 max-w-[300px]"
-          />
+          <div className="min-w-[220px] flex-1 max-w-[300px]">
+            <Select value={customerFilter} onValueChange={setCustomerFilter}>
+              <SelectTrigger className="h-10 rounded-sm border-slate-300 bg-white text-sm shadow-sm">
+                <SelectValue placeholder="Select Customer" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Customers</SelectItem>
+                {customerMappings?.map((customer: any) => (
+                  <SelectItem key={customer.id} value={customer.Customer}>
+                    {customer.Customer}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
           <div className="ml-auto flex items-center gap-4 text-slate-600">
             <Bell className="h-4 w-4 cursor-pointer" />
@@ -6923,8 +3975,8 @@ console.log(`hex: `, customerMappings)
             </Button>
             <Button
               className="h-10 rounded-sm bg-slate-950 px-4 text-[11px] font-bold uppercase tracking-[0.18em] text-white shadow-sm hover:bg-slate-800"
-              onClick={handleFinalizeSelectedLoadingAdviceForBooking}
-              disabled={isFinalizingLoadingAdvice || selectedLoadingAdviceKeys.length < 2}
+              onClick={() => handleFinalizeLoadingAdviceForBooking(selectedContract || filteredLoadingAdviceRows[0] || null)}
+              disabled={isFinalizingLoadingAdvice || !selectedContract}
             >
               {isFinalizingLoadingAdvice ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -6961,18 +4013,6 @@ console.log(`hex: `, customerMappings)
           <Table>
             <TableHeader className="bg-slate-100/80">
               <TableRow className="hover:bg-transparent">
-                <TableHead className="w-12 px-3 py-3 text-center text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                  <Checkbox
-                    checked={allFilteredLoadingAdviceSelected ? true : someFilteredLoadingAdviceSelected ? 'indeterminate' : false}
-                    onCheckedChange={(checked) => {
-                      if (checked === true) {
-                        setSelectedLoadingAdviceKeys(filteredLoadingAdviceRows.map((row) => row.id));
-                      } else {
-                        setSelectedLoadingAdviceKeys([]);
-                      }
-                    }}
-                  />
-                </TableHead>
                 <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Week No.</TableHead>
                 <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Farm</TableHead>
                 <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Port of Loading</TableHead>
@@ -6989,7 +4029,7 @@ console.log(`hex: `, customerMappings)
             <TableBody>
               {contractsLoading ? (
                 <TableRow>
-                  <TableCell colSpan={12} className="h-56 text-center">
+                  <TableCell colSpan={11} className="h-56 text-center">
                     <Loader2 className="mx-auto h-8 w-8 animate-spin text-emerald-700/50" />
                   </TableCell>
                 </TableRow>
@@ -7003,19 +4043,6 @@ console.log(`hex: `, customerMappings)
                       selectedContractId === row.contractId && 'bg-emerald-50/70 ring-1 ring-inset ring-emerald-200'
                     )}
                   >
-                    <TableCell className="px-3 py-3 text-center">
-                      <Checkbox
-                        checked={selectedLoadingAdviceKeys.includes(row.id)}
-                        onCheckedChange={(checked) => {
-                          setSelectedLoadingAdviceKeys((current) =>
-                            checked === true
-                              ? [...new Set([...current, row.id])]
-                              : current.filter((id) => id !== row.id)
-                          );
-                        }}
-                        onClick={(event) => event.stopPropagation()}
-                      />
-                    </TableCell>
                     <TableCell className="px-3 py-3 font-semibold text-slate-900">{row.weekNumber}</TableCell>
                     <TableCell className="px-3 py-3 text-sm font-medium text-slate-700">{row.farm}</TableCell>
                     <TableCell className="px-3 py-3 text-sm text-slate-700">{row.pol}</TableCell>
@@ -7041,7 +4068,7 @@ console.log(`hex: `, customerMappings)
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={12} className="h-56 text-center text-sm text-slate-500">
+                  <TableCell colSpan={11} className="h-56 text-center text-sm text-slate-500">
                     No loading advice manifests match the current filters.
                   </TableCell>
                 </TableRow>
@@ -7065,23 +4092,28 @@ console.log(`hex: `, customerMappings)
               <SelectContent>
                 <SelectItem value="all">All Weeks</SelectItem>
                 {weekOptions.map((week) => (
-                  <SelectItem key={week.value} value={week.value}>
-                    {week.label}
+                  <SelectItem key={week} value={week}>
+                    {week}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-          <SearchableCustomerDropdown
-            selectedCustomer={selectedCustomerObject}
-            customerMappings={customerMappings}
-            onSelectCustomer={(c) => {
-              setCustomerFilter(c ? c.Customer : 'all');
-              setSelectedCustomerObject(c);
-            }}
-            inputClassName="h-10 rounded-sm border-slate-300 bg-white text-sm shadow-sm"
-            containerClassName="min-w-[220px] flex-1 max-w-[300px]"
-          />
+          <div className="min-w-[220px] flex-1 max-w-[300px]">
+            <Select value={customerFilter} onValueChange={setCustomerFilter}>
+              <SelectTrigger className="h-10 rounded-sm border-slate-300 bg-white text-sm shadow-sm">
+                <SelectValue placeholder="Select Customer" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Customers</SelectItem>
+                {customerMappings?.map((customer: any) => (
+                  <SelectItem key={customer.id} value={customer.Customer}>
+                    {customer.Customer}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="ml-auto flex items-center gap-4 text-slate-600">
             <Bell className="h-4 w-4 cursor-pointer" />
             <HelpCircle className="h-4 w-4 cursor-pointer" />
@@ -7159,14 +4191,12 @@ console.log(`hex: `, customerMappings)
                       </Badge>
                     </TableCell>
                     <TableCell className="px-3 py-3 text-right">
-                      {row.workflowStage !== 'BOOKINGS_CREATED' && (
-                        <Button
-                          className="h-8 rounded-sm bg-emerald-700 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-white hover:bg-emerald-800"
-                          onClick={() => openBookingBatchModal((contracts || []).find((contract: any) => contract.id === row.id) || null)}
-                        >
-                          Create Booking
-                        </Button>
-                      )}
+                      <Button
+                        className="h-8 rounded-sm bg-emerald-700 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-white hover:bg-emerald-800"
+                        onClick={() => openBookingBatchModal((contracts || []).find((contract: any) => contract.id === row.id) || null)}
+                      >
+                        Create Booking
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))
@@ -7271,13 +4301,11 @@ console.log(`hex: `, customerMappings)
       <aside className="w-64 bg-anflocor-green text-white flex flex-col shrink-0 shadow-xl no-print">
         <div className="p-6 flex items-center space-x-3 border-b border-white/10"><div className="bg-white/10 p-2 rounded-lg"><Leaf className="h-6 w-6" /></div><span className="text-xl font-bold tracking-tighter">myProduce</span></div>
         <nav className="flex-1 p-4 space-y-1">
-          <Button variant="ghost" onClick={() => navigateToView('ppla')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'ppla' && "bg-white/10")}><Box className="mr-3 h-5 w-5" />PPLA</Button>
-          <Button variant="ghost" onClick={() => navigateToView('cutting-order')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'cutting-order' && "bg-white/10")}><Scissors className="mr-3 h-5 w-5" />PS</Button>
-          <Button variant="ghost" onClick={() => navigateToView('configuration')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'configuration' && "bg-white/10")}><Settings className="mr-3 h-5 w-5" />Configuration</Button>
-          {/* <Button variant="ghost" onClick={() => navigateToView('dashboard')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'dashboard' && "bg-white/10")}><LayoutDashboard className="mr-3 h-5 w-5" />Dashboard</Button> */}
-          {/* <Button variant="ghost" onClick={() => navigateToView('loading-advice')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'loading-advice' && "bg-white/10")}><FileCheck className="mr-3 h-5 w-5" />Loading Advice</Button> */}
-          {/* <Button variant="ghost" onClick={() => navigateToView('bookings')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'bookings' && "bg-white/10")}><Ship className="mr-3 h-5 w-5" />Bookings</Button> */}
-          {/* <Button variant="ghost" onClick={() => navigateToView('trips')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'trips' && "bg-white/10")}><Truck className="mr-3 h-5 w-5" />Trips</Button> */}
+          <Button variant="ghost" onClick={() => navigateToView('dashboard')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'dashboard' && "bg-white/10")}><LayoutDashboard className="mr-3 h-5 w-5" />Dashboard</Button>
+          <Button variant="ghost" onClick={() => navigateToView('loading-advice')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'loading-advice' && "bg-white/10")}><FileCheck className="mr-3 h-5 w-5" />Loading Advice</Button>
+          <Button variant="ghost" onClick={() => navigateToView('bookings')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'bookings' && "bg-white/10")}><Ship className="mr-3 h-5 w-5" />Bookings</Button>
+          <Button variant="ghost" onClick={() => navigateToView('cutting-order')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'cutting-order' && "bg-white/10")}><Scissors className="mr-3 h-5 w-5" />Cutting Orders</Button>
+          <Button variant="ghost" onClick={() => navigateToView('trips')} className={cn("w-full justify-start text-white hover:bg-white/10", activeView === 'trips' && "bg-white/10")}><Truck className="mr-3 h-5 w-5" />Trips</Button>
         </nav>
         <div className="p-4 border-t border-white/10"><Button onClick={handleSignOut} variant="ghost" className="w-full justify-start text-white/70 hover:text-red-400"><LogOut className="mr-3 h-5 w-5" />Sign Out</Button></div>
       </aside>
@@ -7285,22 +4313,6 @@ console.log(`hex: `, customerMappings)
         <div className="flex justify-end mb-4"><div className="flex items-center space-x-3 text-sm text-gray-400 font-medium"><User className="h-4 w-4" /><span>{user?.email} (Admin)</span></div></div>
         {renderContent()}
       </main>
-
-      {/* COMING SOON MODAL */}
-      <Dialog open={isComingSoonModalOpen} onOpenChange={setIsComingSoonModalOpen}>
-        <DialogContent className="max-w-sm p-0 overflow-hidden bg-white border-none shadow-2xl">
-          <div className="p-8 flex flex-col items-center gap-4 text-center">
-            <div className="h-14 w-14 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center">
-              <Clock className="h-7 w-7 text-amber-500" />
-            </div>
-            <div>
-              <h2 className="text-lg font-black text-gray-900 tracking-tight">Coming Soon</h2>
-              <p className="mt-1 text-sm text-slate-500">This feature is currently under development and will be available soon.</p>
-            </div>
-            <Button className="mt-2 w-full bg-emerald-700 text-white hover:bg-emerald-800" onClick={() => setIsComingSoonModalOpen(false)}>Got it</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* NEW LOADING ADVICE MODAL */}
       <Dialog open={isNewLAOpen} onOpenChange={setIsNewLAOpen}>
@@ -7342,8 +4354,8 @@ console.log(`hex: `, customerMappings)
                       </SelectTrigger>
                       <SelectContent>
                         {weekOptions.map((week) => (
-                          <SelectItem key={week.value} value={week.value}>
-                            {week.label}
+                          <SelectItem key={week} value={week}>
+                            {week}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -7355,10 +4367,11 @@ console.log(`hex: `, customerMappings)
                   <Table>
                     <TableHeader className="bg-slate-100/80">
                       <TableRow className="hover:bg-transparent">
-                        <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Company</TableHead>
+                        <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Farm</TableHead>
                         <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Port of Loading</TableHead>
                         <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Port of Destination</TableHead>
                         <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Shipping Line</TableHead>
+                        <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Cut-Off Date</TableHead>
                         <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">ETD</TableHead>
                         <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Total Vans</TableHead>
                         <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">SKU</TableHead>
@@ -7416,7 +4429,14 @@ console.log(`hex: `, customerMappings)
                               className="h-10 rounded-sm border-slate-300 bg-white shadow-sm"
                             />
                           </TableCell>
-
+                          <TableCell className="px-3 py-3 align-top">
+                            <Input
+                              type="date"
+                              value={row.cutOffDate}
+                              onChange={(e) => setLaRows(laRows.map((r) => (r.id === row.id ? { ...r, cutOffDate: e.target.value } : r)))}
+                              className="h-10 rounded-sm border-slate-300 bg-white shadow-sm text-xs"
+                            />
+                          </TableCell>
                           <TableCell className="px-3 py-3 align-top">
                             <Input
                               type="date"
@@ -7453,28 +4473,15 @@ console.log(`hex: `, customerMappings)
                             </Select>
                           </TableCell>
                           <TableCell className="px-3 py-3 align-top text-center">
-                            <div className="inline-flex items-center justify-center gap-1">
-                              {isLARowFilled(row) && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  title="Copy this row"
-                                  className="h-10 w-10 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-                                  onClick={() => copyLARow(row)}
-                                >
-                                  <Copy className="h-4 w-4" />
-                                </Button>
-                              )}
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-10 w-10 text-red-500 hover:bg-red-50 hover:text-red-600"
-                                onClick={() => setLaRows(laRows.filter((r) => r.id !== row.id))}
-                                disabled={laRows.length === 1}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-10 w-10 text-red-500 hover:bg-red-50 hover:text-red-600"
+                              onClick={() => setLaRows(laRows.filter((r) => r.id !== row.id))}
+                              disabled={laRows.length === 1}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -7718,15 +4725,15 @@ console.log(`hex: `, customerMappings)
             </div>
 
             <ScrollArea className="flex-1 min-h-0">
-              <div className="space-y-4 px-4 py-4">
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label className="text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-400">Customer</Label>
+              <div className="space-y-6 px-6 py-5">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Customer</Label>
                     <Select
                       value={cosHeader.customerName}
                       onValueChange={(value) => setCosHeader({ ...cosHeader, customerName: value })}
                     >
-                      <SelectTrigger className="h-9 rounded-sm border-slate-300 bg-white shadow-sm">
+                      <SelectTrigger className="h-11 rounded-sm border-slate-300 bg-white shadow-sm">
                         <SelectValue placeholder="Select Customer" />
                       </SelectTrigger>
                       <SelectContent>
@@ -7738,16 +4745,16 @@ console.log(`hex: `, customerMappings)
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-400">Week No</Label>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Week No</Label>
                     <Input
                       value={cosHeader.weekNumber}
                       onChange={(e) => setCosHeader({ ...cosHeader, weekNumber: e.target.value })}
-                      className="h-9 rounded-sm border-slate-300 bg-white shadow-sm"
+                      className="h-11 rounded-sm border-slate-300 bg-white shadow-sm"
                     />
                   </div>
-                  <div className="space-y-1 md:col-span-1">
-                    <Label className="text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-400">POD</Label>
+                  <div className="space-y-2 md:col-span-1">
+                    <Label className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">POD</Label>
                     <Select
                       value={cosHeader.pod}
                       onValueChange={(value) => {
@@ -7769,16 +4776,16 @@ console.log(`hex: `, customerMappings)
                   </div>
                 </div>
 
-                <div className="rounded-sm border border-slate-200 bg-slate-50/60 p-3 shadow-sm">
-                  <div className="mb-3 text-[9px] font-semibold uppercase tracking-[0.22em] text-slate-300">Containers Allocated</div>
-                  <div className="flex flex-wrap items-stretch justify-between gap-3">
-                    <div className="flex flex-wrap gap-2">
+                <div className="rounded-sm border border-slate-200 bg-slate-50/60 p-4 shadow-sm">
+                  <div className="mb-4 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-300">Containers Allocated</div>
+                  <div className="flex flex-wrap items-stretch justify-between gap-4">
+                    <div className="flex flex-wrap gap-3">
                       {cosSummary.length > 0 ? (
                         cosSummary.slice(0, 3).map((item) => (
                           <Card key={item.pod} className="min-w-[140px] rounded-sm border-slate-200 bg-white shadow-sm">
-                            <CardContent className="p-3">
-                              <div className="text-[8px] font-semibold uppercase tracking-[0.16em] text-slate-300">{item.pod}</div>
-                              <div className="mt-1 text-lg font-black text-slate-900">
+                            <CardContent className="p-4">
+                              <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-300">{item.pod}</div>
+                              <div className="mt-1 text-xl font-black text-slate-900">
                                 {item.allocated}/{item.total || 0}
                               </div>
                             </CardContent>
@@ -7807,34 +4814,34 @@ console.log(`hex: `, customerMappings)
                   <Table>
                     <TableHeader className="bg-slate-100/80">
                       <TableRow className="hover:bg-transparent">
-                        <TableHead className="w-12 px-2 py-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">#</TableHead>
-                        <TableHead className="px-2 py-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">PS</TableHead>
-                        <TableHead className="px-2 py-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">Shipping Line</TableHead>
-                        <TableHead className="px-2 py-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">Booking No</TableHead>
-                        <TableHead className="px-2 py-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">Container No</TableHead>
-                        <TableHead className="px-2 py-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">ATW Status</TableHead>
-                        <TableHead className="px-2 py-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">POD</TableHead>
-                        <TableHead className="px-2 py-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">Cut-Off Date</TableHead>
-                        <TableHead className="px-2 py-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">ETD</TableHead>
-                        <TableHead className="px-2 py-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">SKU</TableHead>
-                        <TableHead className="px-2 py-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">Palletization</TableHead>
-                        <TableHead className="px-2 py-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500 text-center">Actions</TableHead>
+                        <TableHead className="w-12 px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">#</TableHead>
+                        <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">PS</TableHead>
+                        <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Shipping Line</TableHead>
+                        <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Booking No</TableHead>
+                        <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Container No</TableHead>
+                        <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">ATW Status</TableHead>
+                        <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">POD</TableHead>
+                        <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Cut-Off Date</TableHead>
+                        <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">ETD</TableHead>
+                        <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">SKU</TableHead>
+                        <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Palletization</TableHead>
+                        <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 text-center">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {cosRows.map((row, index) => (
-                        <TableRow key={row.id} className="h-12 hover:bg-transparent">
-                          <TableCell className="px-2 py-2 align-top text-[11px] font-semibold text-slate-500">{index + 1}</TableCell>
-                          <TableCell className="px-2 py-2 align-top">
+                        <TableRow key={row.id} className="h-14 hover:bg-transparent">
+                          <TableCell className="px-3 py-3 align-top text-sm font-bold text-slate-500">{index + 1}</TableCell>
+                          <TableCell className="px-3 py-3 align-top">
                             <Input
                               value={row.ps}
                               onChange={(e) => setCosRows(cosRows.map((r) => (r.id === row.id ? { ...r, ps: e.target.value } : r)))}
-                              className="h-8 rounded-sm border-slate-300 bg-white shadow-sm text-sm"
+                              className="h-10 rounded-sm border-slate-300 bg-white shadow-sm"
                             />
                           </TableCell>
-                          <TableCell className="px-2 py-2 align-top">
+                          <TableCell className="px-3 py-3 align-top">
                             <Select value={row.shippingLine} onValueChange={(v) => setCosRows(cosRows.map((r) => (r.id === row.id ? { ...r, shippingLine: v } : r)))}>
-                              <SelectTrigger className="h-8 rounded-sm border-slate-300 bg-white shadow-sm text-sm">
+                              <SelectTrigger className="h-10 rounded-sm border-slate-300 bg-white shadow-sm">
                                 <SelectValue placeholder="Select" />
                               </SelectTrigger>
                               <SelectContent>
@@ -7850,7 +4857,7 @@ console.log(`hex: `, customerMappings)
                               </SelectContent>
                             </Select>
                           </TableCell>
-                          <TableCell className="px-2 py-2 align-top">
+                          <TableCell className="px-3 py-3 align-top">
                             <Select
                               value={row.bookingNumber}
                               onValueChange={(v) => {
@@ -7868,7 +4875,7 @@ console.log(`hex: `, customerMappings)
                                 );
                               }}
                             >
-                              <SelectTrigger className="h-8 rounded-sm border-slate-300 bg-white shadow-sm text-sm">
+                              <SelectTrigger className="h-10 rounded-sm border-slate-300 bg-white shadow-sm">
                                 <SelectValue placeholder="Select Booking No" />
                               </SelectTrigger>
                               <SelectContent>
@@ -7880,13 +4887,13 @@ console.log(`hex: `, customerMappings)
                               </SelectContent>
                             </Select>
                           </TableCell>
-                          <TableCell className="px-2 py-2 align-top">
+                          <TableCell className="px-3 py-3 align-top">
                             <Select
                               value={row.containerNo}
                               onValueChange={(v) => setCosRows(cosRows.map((r) => (r.id === row.id ? { ...r, containerNo: v } : r)))}
                             >
-                              <SelectTrigger className="h-8 rounded-sm border-slate-300 bg-white shadow-sm text-sm">
-                                <SelectValue placeholder="Select Container# No" />
+                              <SelectTrigger className="h-10 rounded-sm border-slate-300 bg-white shadow-sm">
+                                <SelectValue placeholder="Select Container No" />
                               </SelectTrigger>
                               <SelectContent>
                                 {containerNumberOptions.length > 0 ? (
@@ -7901,12 +4908,12 @@ console.log(`hex: `, customerMappings)
                               </SelectContent>
                             </Select>
                           </TableCell>
-                          <TableCell className="px-2 py-2 align-top">
+                          <TableCell className="px-3 py-3 align-top">
                             <Badge
                               variant="outline"
                               onClick={() => setCosRows(cosRows.map((r) => (r.id === row.id ? { ...r, atwStatus: r.atwStatus === 'PENDING' ? 'READY' : r.atwStatus === 'READY' ? 'LOADED' : 'PENDING' } : r)))}
                               className={cn(
-                                'cursor-pointer border px-2 py-1 text-[9px] font-semibold',
+                                'cursor-pointer border px-2 py-1 text-[10px] font-bold',
                                 row.atwStatus === 'PENDING' && 'border-red-200 bg-red-50 text-red-600',
                                 row.atwStatus === 'READY' && 'border-amber-200 bg-amber-50 text-amber-600',
                                 row.atwStatus === 'LOADED' && 'border-emerald-200 bg-emerald-50 text-emerald-700'
@@ -7915,9 +4922,9 @@ console.log(`hex: `, customerMappings)
                               {row.atwStatus}
                             </Badge>
                           </TableCell>
-                          <TableCell className="px-2 py-2 align-top">
+                          <TableCell className="px-3 py-3 align-top">
                             <Select value={row.pod} onValueChange={(v) => setCosRows(cosRows.map((r) => (r.id === row.id ? { ...r, pod: v } : r)))}>
-                              <SelectTrigger className="h-8 rounded-sm border-slate-300 bg-white shadow-sm text-sm">
+                              <SelectTrigger className="h-10 rounded-sm border-slate-300 bg-white shadow-sm">
                                 <SelectValue placeholder="Select" />
                               </SelectTrigger>
                               <SelectContent>
@@ -7929,33 +4936,33 @@ console.log(`hex: `, customerMappings)
                               </SelectContent>
                             </Select>
                           </TableCell>
-                          <TableCell className="px-2 py-2 align-top">
+                          <TableCell className="px-3 py-3 align-top">
                             <Input
                               type="date"
                               value={row.cutOffDate}
                               onChange={(e) => setCosRows(cosRows.map((r) => (r.id === row.id ? { ...r, cutOffDate: e.target.value } : r)))}
-                              className="h-8 rounded-sm border-slate-300 bg-white shadow-sm text-[11px]"
+                              className="h-10 rounded-sm border-slate-300 bg-white shadow-sm text-xs"
                             />
                           </TableCell>
-                          <TableCell className="px-2 py-2 align-top">
+                          <TableCell className="px-3 py-3 align-top">
                             <Input
                               type="date"
                               value={row.etd}
                               onChange={(e) => setCosRows(cosRows.map((r) => (r.id === row.id ? { ...r, etd: e.target.value } : r)))}
-                              className="h-8 rounded-sm border-slate-300 bg-white shadow-sm text-[11px]"
+                              className="h-10 rounded-sm border-slate-300 bg-white shadow-sm text-xs"
                             />
                           </TableCell>
-                          <TableCell className="px-2 py-2 align-top">
+                          <TableCell className="px-3 py-3 align-top">
                             <Input
                               value={row.sku}
                               onChange={(e) => setCosRows(cosRows.map((r) => (r.id === row.id ? { ...r, sku: e.target.value } : r)))}
                               placeholder="SKU"
-                              className="h-8 rounded-sm border-slate-300 bg-white shadow-sm text-sm"
+                              className="h-10 rounded-sm border-slate-300 bg-white shadow-sm"
                             />
                           </TableCell>
-                          <TableCell className="px-2 py-2 align-top">
+                          <TableCell className="px-3 py-3 align-top">
                             <Select value={normalizePalletization(row.palletization)} onValueChange={(v) => setCosRows(cosRows.map((r) => (r.id === row.id ? { ...r, palletization: normalizePalletization(v) } : r)))}>
-                              <SelectTrigger className="h-8 rounded-sm border-slate-300 bg-white shadow-sm text-sm">
+                              <SelectTrigger className="h-10 rounded-sm border-slate-300 bg-white shadow-sm">
                                 <SelectValue placeholder="Select" />
                               </SelectTrigger>
                               <SelectContent>
@@ -7964,11 +4971,11 @@ console.log(`hex: `, customerMappings)
                               </SelectContent>
                             </Select>
                           </TableCell>
-                          <TableCell className="px-2 py-2 align-top text-center">
+                          <TableCell className="px-3 py-3 align-top text-center">
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-9 w-9 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                              className="h-10 w-10 text-slate-400 hover:bg-red-50 hover:text-red-600"
                               onClick={() => setCosRows(cosRows.filter((r) => r.id !== row.id))}
                               disabled={cosRows.length === 1}
                             >
@@ -7983,31 +4990,31 @@ console.log(`hex: `, customerMappings)
               </div>
             </ScrollArea>
 
-            <div className="border-t border-slate-200 bg-white px-4 py-3">
-              <div className="mb-3">
+            <div className="border-t border-slate-200 bg-white px-6 py-4">
+              <div className="mb-5">
                 <Button
                   variant="ghost"
-                  className="h-8 px-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
+                  className="h-9 px-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
                   onClick={() =>
                     setCosRows((rows) => [
                       ...rows,
-                      createEmptyCOSRow(String(rows.length + 1), cosHeader.pod || '', cosHeader.shippingLine || ''),
+                      createEmptyCOSRow(String(rows.length + 1), cosHeader.pod || ''),
                     ])
                   }
                 >
-                  <Plus className="mr-2 h-3.5 w-3.5" />
+                  <Plus className="mr-2 h-4 w-4" />
                   Add Row
                 </Button>
               </div>
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-[9px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+              <div className="flex items-center justify-between">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
                   System audit: action will be logged under UID-4412
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" onClick={() => setIsCosModalOpen(false)} className="h-9 rounded-sm border-slate-300 px-4 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-700">
+                <div className="flex items-center gap-3">
+                  <Button variant="outline" onClick={() => setIsCosModalOpen(false)} className="h-10 rounded-sm border-slate-300 px-6 text-xs font-bold uppercase tracking-[0.18em] text-slate-700">
                     Cancel
                   </Button>
-                  <Button className="h-9 rounded-sm bg-emerald-700 px-4 text-[10px] font-semibold uppercase tracking-[0.16em] text-white shadow-sm hover:bg-emerald-800" onClick={handleSaveCOS}>
+                  <Button className="h-10 rounded-sm bg-emerald-700 px-6 text-xs font-bold uppercase tracking-[0.18em] text-white shadow-sm hover:bg-emerald-800" onClick={handleSaveCOS}>
                     Submit
                   </Button>
                 </div>
@@ -8820,7 +5827,6 @@ console.log(`hex: `, customerMappings)
       {/* NEW TRIP MODAL */}
       <Dialog open={isNewTripOpen} onOpenChange={(open) => { setIsNewTripOpen(open); if(!open) setTripStep(1); }}>
         <DialogContent className="max-w-[95vw] w-full p-0 overflow-hidden h-[90vh] flex flex-col">
-            <DialogTitle className="text-xl font-bold text-gray-900 tracking-tight">Create Trip</DialogTitle>
           <div className="p-4 border-b bg-gray-50 border-l-4 border-l-green-600 shrink-0"><p className="text-sm font-medium">Please ensure all trip details match the physical manifest.</p></div>
           <div className="flex-1 overflow-y-auto p-8 space-y-8 bg-white">
             <div className="flex items-center justify-center max-w-2xl mx-auto mb-8">
@@ -8864,16 +5870,10 @@ console.log(`hex: `, customerMappings)
                 <div className="grid grid-cols-2 gap-8 border-b pb-8">
                   <div className="space-y-2">
                     <Label className="text-[10px] font-black uppercase text-gray-400">Customer</Label>
-                    <SearchableCustomerDropdown
-                      selectedCustomer={selectedCustomerObject}
-                      customerMappings={customerMappings}
-                      onSelectCustomer={(c) => {
-                        if (c) setNewTripHeader({...newTripHeader, customerName: c.Customer});
-                        setSelectedCustomerObject(c);
-                      }}
-                      inputClassName="h-12 bg-gray-50"
-                      containerClassName="w-full"
-                    />
+                    <Select value={newTripHeader.customerName} onValueChange={(val) => setNewTripHeader({...newTripHeader, customerName: val})}>
+                      <SelectTrigger className="h-12 bg-gray-50"><SelectValue placeholder="Select Customer" /></SelectTrigger>
+                      <SelectContent>{customerMappings?.map((c: any) => (<SelectItem key={c.id} value={c.Customer}>{c.Customer}</SelectItem>))}</SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <Label className="text-[10px] font-black uppercase text-gray-400">Week Number</Label>
@@ -8897,7 +5897,7 @@ console.log(`hex: `, customerMappings)
                       else setNewTripHeader({...newTripHeader, bookingNo: val, bookingBatchId: '', laId: ''});
                     }}>
                       <SelectTrigger className="h-10"><SelectValue placeholder="--Select--" /></SelectTrigger>
-                      <SelectContent>{bookingNumberFilterOptions.map((bookingNumber) => (<SelectItem key={bookingNumber} value={bookingNumber}>{bookingNumber}</SelectItem>))}</SelectContent>
+                      <SelectContent>{bookingNumberOptions.map((bookingNumber) => (<SelectItem key={bookingNumber} value={bookingNumber}>{bookingNumber}</SelectItem>))}</SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-gray-300">Shipping Line</Label><Input className="h-10 bg-white" value={newTripHeader.shippingLine} readOnly /></div>
@@ -8965,53 +5965,20 @@ console.log(`hex: `, customerMappings)
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {bindCoRows.map((row, index) => {
-                      const isPreBound = Boolean(row.originalContainerNo);
-                      const usedContainers = bindCoRows.map(r => r.containerNo).filter(Boolean);
-                      const value = row.containerNo || row.originalContainerNo || '';
-                      return (
+                    {bindCoRows.map((row, index) => (
                       <TableRow key={row.id}>
                         <TableCell className="text-[11px] font-bold text-gray-400">{index + 1}</TableCell>
-                        <TableCell><Input className="h-9 bg-gray-50 border shadow-sm font-medium w-20" value={row.ps} readOnly/></TableCell>
-                        <TableCell><Input className="h-9 bg-gray-50 border shadow-sm font-medium w-24" value={row.pod} readOnly/></TableCell>
-                        <TableCell><Input type="date" className="h-9 bg-gray-50 border shadow-sm text-xs" value={row.cutOffDate} readOnly/></TableCell>
-                        <TableCell><Input type="date" className="h-9 bg-gray-50 border shadow-sm text-xs" value={row.etd} readOnly/></TableCell>
-                        <TableCell><Input type="date" className="h-9 bg-gray-50 border shadow-sm text-xs" value={row.taskDate} readOnly/></TableCell>
-                        <TableCell><Input className="h-9 bg-gray-50 border shadow-sm font-medium w-24" value={row.sku} readOnly/></TableCell>
-                        <TableCell><Input className="h-9 bg-gray-50 border shadow-sm font-medium w-28" value={row.palletization} readOnly/></TableCell>
+                        <TableCell><Input className="h-9 bg-white border shadow-sm font-medium w-20" value={row.ps} onChange={(e) => setBindCoRows(bindCoRows.map(r => r.id === row.id ? { ...r, ps: e.target.value } : r))}/></TableCell>
+                        <TableCell><Input className="h-9 bg-white border shadow-sm font-medium w-24" value={row.pod} readOnly/></TableCell>
+                        <TableCell><Input type="date" className="h-9 bg-white border shadow-sm text-xs" value={row.cutOffDate} onChange={(e) => setBindCoRows(bindCoRows.map(r => r.id === row.id ? { ...r, cutOffDate: e.target.value } : r))}/></TableCell>
+                        <TableCell><Input type="date" className="h-9 bg-white border shadow-sm text-xs" value={row.etd} onChange={(e) => setBindCoRows(bindCoRows.map(r => r.id === row.id ? { ...r, etd: e.target.value } : r))}/></TableCell>
+                        <TableCell><Input type="date" className="h-9 bg-white border shadow-sm text-xs" value={row.taskDate} onChange={(e) => setBindCoRows(bindCoRows.map(r => r.id === row.id ? { ...r, taskDate: e.target.value } : r))}/></TableCell>
+                        <TableCell><Input className="h-9 bg-white border shadow-sm font-medium w-24" value={row.sku} onChange={(e) => setBindCoRows(bindCoRows.map(r => r.id === row.id ? { ...r, sku: e.target.value } : r))}/></TableCell>
+                        <TableCell><Input className="h-9 bg-white border shadow-sm font-medium w-28" value={row.palletization} onChange={(e) => setBindCoRows(bindCoRows.map(r => r.id === row.id ? { ...r, palletization: e.target.value } : r))}/></TableCell>
                         <TableCell>
-                          <Select
-                            value={value}
-                            disabled={isPreBound}
-                            onValueChange={(val) => setBindCoRows(bindCoRows.map(r => r.id === row.id ? { ...r, containerNo: val === '__unbind__' ? '' : val } : r))}
-                          >
-                            <SelectTrigger className={cn(
-                              'h-9 border shadow-sm font-bold w-40',
-                              value ? 'bg-slate-100 text-gray-500' : 'bg-white'
-                            )}>
-                              <SelectValue placeholder="Select Container" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {(() => {
-                                if (isPreBound) {
-                                  const val = row.originalContainerNo || row.containerNo || '';
-                                  return [<SelectItem key={val} value={val}>{val}</SelectItem>];
-                                }
-                                if (row.containerNo) {
-                                  return [
-                                    <SelectItem key={row.containerNo} value={row.containerNo}>{row.containerNo}</SelectItem>,
-                                    <SelectItem key="__unbind__" value="__unbind__">— Unbind —</SelectItem>
-                                  ];
-                                }
-                                const options = tripRows
-                                  .map(tr => tr.containerNo)
-                                  .filter(Boolean)
-                                  .filter((c) => !usedContainers.includes(c));
-                                return options.map((c) => (
-                                  <SelectItem key={c} value={c}>{c}</SelectItem>
-                                ));
-                              })()}
-                            </SelectContent>
+                          <Select value={row.containerNo} onValueChange={(val) => setBindCoRows(bindCoRows.map(r => r.id === row.id ? { ...r, containerNo: val } : r))}>
+                            <SelectTrigger className="h-9 bg-white border shadow-sm font-bold w-40"><SelectValue placeholder="Select Container" /></SelectTrigger>
+                            <SelectContent>{tripRows.filter(tr => tr.containerNo).map(tr => (<SelectItem key={tr.id} value={tr.containerNo}>{tr.containerNo}</SelectItem>))}</SelectContent>
                           </Select>
                         </TableCell>
                         <TableCell className="text-center">
@@ -9027,12 +5994,9 @@ console.log(`hex: `, customerMappings)
                             {row.status || 'PENDING'}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-center">
-                          <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => setBindCoRows(bindCoRows.filter(r => r.id !== row.id))}><Trash2 className="h-4 w-4" /></Button>
-                        </TableCell>
+                        <TableCell className="text-center"><Button variant="ghost" size="icon" className="text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => setBindCoRows(bindCoRows.filter(r => r.id !== row.id))}><Trash2 className="h-4 w-4" /></Button></TableCell>
                       </TableRow>
-                    );
-                    })}
+                    ))}
                   </TableBody>
                 </Table>
               </>
