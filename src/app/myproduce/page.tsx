@@ -127,7 +127,8 @@ type ViewState = 'dashboard' | 'configuration' | 'customer-mapping' | 'material-
 
 type CuttingOrderStatus = 'EMPTY' | 'PENDING' | 'ONGOING' | 'DEPART';
 type LoadingAdviceWorkflowStage = 'LA_CREATED' | 'COS_CREATED' | 'READY_FOR_BOOKING' | 'BOOKINGS_CREATED';
-type PplaBookingModalTab = 'add-new' | 'bind-existing';
+type BookingStatus = 'Booking Created' | 'Booking Confirmed';
+type PplaBookingModalTab = 'add-new' | 'bind-existing' | 'edit-booking';
 type PplaContainerModalTab = 'add-new' | 'bind-existing';
 
 const PPLA_PAGE_SIZE = 10;
@@ -353,6 +354,7 @@ interface LoadingAdviceListRow {
   totalVans: string;
   sku: string;
   palletization: string;
+  bookingStatus?: string;
 }
 
 interface CuttingOrderListRow {
@@ -386,6 +388,7 @@ interface BookingListRow {
   containersConfirmed: number;
   customerName: string;
   weekNumber: string;
+  bookingStatus?: BookingStatus;
 }
 
 interface DRRow {
@@ -486,7 +489,16 @@ export default function MyProduceDashboard() {
   const [selectedPplaLARowForBookings, setSelectedPplaLARowForBookings] = useState<LoadingAdviceListRow | null>(null);
   const [pplaBookingModalTab, setPplaBookingModalTab] = useState<PplaBookingModalTab>('add-new');
   const [isPplaAddBookingFormOpen, setIsPplaAddBookingFormOpen] = useState(false);
+  const [selectedPplaBookingForEdit, setSelectedPplaBookingForEdit] = useState<BookingListRow | null>(null);
   const [pplaNewBookingDraft, setPplaNewBookingDraft] = useState({
+    bookingNumber: '',
+    shippingLine: '',
+    vesselName: '',
+    pod: '',
+    attachmentUrl: '',
+    containersConfirmed: 0,
+  });
+  const [pplaEditBookingDraft, setPplaEditBookingDraft] = useState({
     bookingNumber: '',
     shippingLine: '',
     vesselName: '',
@@ -956,6 +968,7 @@ export default function MyProduceDashboard() {
               ? contract.selectedSKUs[0]
               : contract.sku || '--',
           palletization: item.palletization || contract.palletizedType || '--',
+          bookingStatus: contract.bookingStatus || 'Empty',
         });
       });
     });
@@ -1134,7 +1147,7 @@ export default function MyProduceDashboard() {
           id: row.bookingId || row.id || `${batch.id}-${index}`,
           batchId: batch.id,
           laId: row.laId || batch.laId || '',
-          bookingNumber: row.bookingNumber || '--',
+          bookingNumber: row.bookingNumber || '',
           shippingLine: row.shippingLine || batch.shippingLine || '--',
           vesselName: row.vesselName || batch.vesselName || '--',
           pod: row.pod || batch.pod || '--',
@@ -1706,8 +1719,8 @@ export default function MyProduceDashboard() {
           shippingLine: row.shippingLine || '',
           bookingNo: '',
           containerNo: '',
-          atwStatus: 'PENDING',
-          status: 'PENDING',
+          atwStatus: 'EMPTY',
+          status: 'EMPTY',
           pod: row.pod || '',
           cutOffDate: row.cutOffDate || '',
           etd: row.etd || '',
@@ -1720,6 +1733,7 @@ export default function MyProduceDashboard() {
         contractId,
         ...newLAHeader,
         status: 'pending',
+        bookingStatus: 'Empty',
         workflowStage: 'LA_CREATED',
         receivedAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -1835,11 +1849,11 @@ export default function MyProduceDashboard() {
 
   const handleCreatePplaBooking = async () => {
     if (!db || !selectedPplaLARowForBookings) return;
-    if (!pplaNewBookingDraft.bookingNumber || !pplaNewBookingDraft.shippingLine || !pplaNewBookingDraft.vesselName || !pplaNewBookingDraft.pod) {
+    if (!pplaNewBookingDraft.shippingLine || !pplaNewBookingDraft.vesselName || !pplaNewBookingDraft.pod) {
       toast({
         variant: 'destructive',
         title: 'Validation Error',
-        description: 'Booking No, Shipping Line, Vessel, and POD are required.',
+        description: 'Shipping Line, Vessel, and POD are required. Booking No is optional and can be added later.',
       });
       return;
     }
@@ -1849,12 +1863,13 @@ export default function MyProduceDashboard() {
       const bookingItem = {
         bookingId: `${batchId}-1`,
         laId: selectedPplaLARowForBookings.id,
-        bookingNumber: pplaNewBookingDraft.bookingNumber,
+        bookingNumber: pplaNewBookingDraft.bookingNumber || '',
         shippingLine: pplaNewBookingDraft.shippingLine,
         vesselName: pplaNewBookingDraft.vesselName,
         pod: pplaNewBookingDraft.pod,
         attachmentUrl: pplaNewBookingDraft.attachmentUrl,
         containersConfirmed: Number(pplaNewBookingDraft.containersConfirmed || 0) || 0,
+        bookingStatus: 'Booking Created' as BookingStatus,
       };
 
       await setDoc(doc(db, BOOKING_PATH, batchId), {
@@ -1865,23 +1880,60 @@ export default function MyProduceDashboard() {
         workflowStage: 'BOOKINGS_CREATED',
         totalBookings: 1,
         bookingNumber: bookingItem.bookingNumber,
-        bookingNumbers: [bookingItem.bookingNumber],
+        bookingNumbers: bookingItem.bookingNumber ? [bookingItem.bookingNumber] : [],
         shippingLine: bookingItem.shippingLine,
         vesselName: bookingItem.vesselName,
         pod: bookingItem.pod,
         attachmentUrl: bookingItem.attachmentUrl,
         containersConfirmed: bookingItem.containersConfirmed,
+        bookingStatus: 'Booking Created',
         items: [bookingItem],
         receivedAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
 
-      const rowRef = doc(collection(db, `${BOOKING_PATH}/${batchId}/rows`));
-      await setDoc(rowRef, {
+      const rowDocId = bookingItem.bookingId;
+      const rowDocRef = doc(db, BOOKING_PATH, batchId, 'rows', rowDocId);
+      await setDoc(rowDocRef, {
         ...bookingItem,
-        bookingId: rowRef.id,
         updatedAt: serverTimestamp(),
       });
+
+      // Update contract bookingStatus and COs atwStatus
+      const contractRef = doc(db, CONTRACT_PATH, selectedPplaLARowForBookings.contractId);
+      await updateDoc(contractRef, {
+        bookingStatus: 'Booking Created',
+        updatedAt: serverTimestamp(),
+      });
+
+      // Update all COs for this LA to PENDING status
+      const cosToUpdate = cuttingOrderRows.filter(
+        (co: any) => co.contractId === selectedPplaLARowForBookings.contractId && co.status === 'EMPTY'
+      );
+
+      if (cosToUpdate.length > 0) {
+        // Get the contract to update its cuttingOrders array
+        const contractSnapshot = await getDoc(contractRef);
+        if (contractSnapshot.exists()) {
+          const contract = contractSnapshot.data();
+          const updatedCuttingOrders = (contract.cuttingOrders || []).map((co: any) => {
+            const isCOToUpdate = cosToUpdate.some((updateCo: any) => updateCo.id === (co.itemId || co.id));
+            if (isCOToUpdate) {
+              return {
+                ...co,
+                status: 'PENDING',
+                atwStatus: 'PENDING',
+              };
+            }
+            return co;
+          });
+
+          await updateDoc(contractRef, {
+            cuttingOrders: updatedCuttingOrders,
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
 
       toast({ title: 'Booking Added', description: 'New booking was created and bound to this loading advice.' });
       setPplaNewBookingDraft({
@@ -1895,6 +1947,132 @@ export default function MyProduceDashboard() {
       setIsPplaAddBookingFormOpen(false);
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Error Creating Booking', description: err.message });
+    }
+  };
+
+  const handleEditPplaBooking = async () => {
+    if (!db || !selectedPplaBookingForEdit || !selectedPplaLARowForBookings) return;
+    if (!pplaEditBookingDraft.shippingLine || !pplaEditBookingDraft.vesselName || !pplaEditBookingDraft.pod) {
+      toast({
+        variant: 'destructive',
+        title: 'Validation Error',
+        description: 'Shipping Line, Vessel, and POD are required.',
+      });
+      return;
+    }
+
+    try {
+      const hadBookingNumber = Boolean(selectedPplaBookingForEdit.bookingNumber);
+      const hasBookingNumber = Boolean(pplaEditBookingDraft.bookingNumber);
+      const newBookingNumberEntered = !hadBookingNumber && hasBookingNumber;
+
+      // Update the booking document
+      const bookingRef = doc(db, BOOKING_PATH, selectedPplaBookingForEdit.batchId);
+      const bookingRowRef = doc(db, BOOKING_PATH, selectedPplaBookingForEdit.batchId, 'rows', selectedPplaBookingForEdit.id);
+
+      const newBookingStatus: BookingStatus = newBookingNumberEntered ? 'Booking Confirmed' : selectedPplaBookingForEdit.bookingStatus || 'Booking Created';
+
+      // Get current batch to update its items array
+      const batchSnapshot = await getDoc(bookingRef);
+      if (!batchSnapshot.exists()) return;
+      const batch = batchSnapshot.data();
+      const updatedItems = (batch.items || []).map((item: any) => ({
+        ...item,
+        bookingNumber: pplaEditBookingDraft.bookingNumber || item.bookingNumber,
+        shippingLine: pplaEditBookingDraft.shippingLine || item.shippingLine,
+        vesselName: pplaEditBookingDraft.vesselName || item.vesselName,
+        pod: pplaEditBookingDraft.pod || item.pod,
+        attachmentUrl: pplaEditBookingDraft.attachmentUrl || item.attachmentUrl,
+        containersConfirmed: Number(pplaEditBookingDraft.containersConfirmed || item.containersConfirmed || 0),
+        bookingStatus: newBookingStatus,
+      }));
+
+      // Update batch document with updated items array
+      await updateDoc(bookingRef, {
+        bookingNumber: pplaEditBookingDraft.bookingNumber || selectedPplaBookingForEdit.bookingNumber,
+        bookingNumbers: Array.from(new Set([pplaEditBookingDraft.bookingNumber || selectedPplaBookingForEdit.bookingNumber].filter(Boolean))),
+        shippingLine: pplaEditBookingDraft.shippingLine,
+        vesselName: pplaEditBookingDraft.vesselName,
+        pod: pplaEditBookingDraft.pod,
+        attachmentUrl: pplaEditBookingDraft.attachmentUrl,
+        containersConfirmed: Number(pplaEditBookingDraft.containersConfirmed || 0),
+        bookingStatus: newBookingStatus,
+        items: updatedItems,
+        updatedAt: serverTimestamp(),
+      });
+
+      await updateDoc(bookingRowRef, {
+        bookingNumber: pplaEditBookingDraft.bookingNumber || selectedPplaBookingForEdit.bookingNumber,
+        shippingLine: pplaEditBookingDraft.shippingLine,
+        vesselName: pplaEditBookingDraft.vesselName,
+        pod: pplaEditBookingDraft.pod,
+        attachmentUrl: pplaEditBookingDraft.attachmentUrl,
+        containersConfirmed: Number(pplaEditBookingDraft.containersConfirmed || 0),
+        bookingStatus: newBookingStatus,
+        updatedAt: serverTimestamp(),
+      });
+
+      // Always update contract bookingStatus to Booking Confirmed when entering booking number
+      if (newBookingNumberEntered && selectedPplaLARowForBookings) {
+        try {
+          const contractId = selectedPplaLARowForBookings.contractId;
+          const contractRef = doc(db, CONTRACT_PATH, contractId);
+          const contractSnapshot = await getDoc(contractRef);
+          
+          if (contractSnapshot.exists()) {
+            const contract = contractSnapshot.data();
+            
+            // Update ALL COs to AVAILABLE status
+            const updatedCuttingOrders = (contract.cuttingOrders || []).map((co: any) => ({
+              ...co,
+              status: 'AVAILABLE',
+              atwStatus: 'AVAILABLE',
+            }));
+            
+            console.log('Updating contract:', contractId, 'with booking status: Booking Confirmed');
+            console.log('Updated COs:', updatedCuttingOrders);
+            
+            // Always update contract with new COs and booking status
+            await updateDoc(contractRef, {
+              cuttingOrders: updatedCuttingOrders,
+              bookingStatus: 'Booking Confirmed',
+              updatedAt: serverTimestamp(),
+            });
+            
+            console.log('Contract updated successfully');
+            
+            // Refetch to confirm update
+            const updatedContractSnapshot = await getDoc(contractRef);
+            if (updatedContractSnapshot.exists()) {
+              const updatedContract = updatedContractSnapshot.data();
+              console.log('Refetched contract, new bookingStatus:', updatedContract.bookingStatus);
+              setSelectedPplaLARowForBookings((prev) => prev ? {
+                ...prev,
+                bookingStatus: updatedContract.bookingStatus,
+              } : null);
+            }
+          } else {
+            console.error('Contract does not exist:', contractId);
+          }
+        } catch (coError: any) {
+          console.error('Failed to update contract:', coError);
+          toast({ variant: 'destructive', title: 'Warning', description: 'Booking updated but could not update LA/CO status: ' + coError.message });
+        }
+      }
+
+      toast({ title: 'Booking Updated', description: 'Booking details were successfully updated.' });
+      setPplaEditBookingDraft({
+        bookingNumber: '',
+        shippingLine: '',
+        vesselName: '',
+        pod: '',
+        attachmentUrl: '',
+        containersConfirmed: 0,
+      });
+      setSelectedPplaBookingForEdit(null);
+      setIsPplaBookingsModalOpen(false);
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error Updating Booking', description: err.message });
     }
   };
 
@@ -2087,7 +2265,7 @@ export default function MyProduceDashboard() {
 
       await handleInlineCuttingOrderRowUpdate(selectedPplaAllocationRowForContainer, {
         containerNo: pplaNewContainerDraft.containerNo,
-        atwStatus: mapContainerAtwStatusToCuttingOrderAtwStatus(pplaNewContainerDraft.atwStatus),
+        // atwStatus: mapContainerAtwStatusToCuttingOrderAtwStatus(pplaNewContainerDraft.atwStatus),
       });
 
       toast({ title: 'Container Bound', description: 'New container was added and bound to the selected CO.' });
@@ -2107,7 +2285,7 @@ export default function MyProduceDashboard() {
 
     await handleInlineCuttingOrderRowUpdate(selectedPplaAllocationRowForContainer, {
       containerNo: selectedContainer.containerNo,
-      atwStatus: mapContainerAtwStatusToCuttingOrderAtwStatus(selectedContainer.atwStatus),
+      // atwStatus: mapContainerAtwStatusToCuttingOrderAtwStatus(selectedContainer.atwStatus),
     });
 
     toast({ title: 'Container Bound', description: 'Selected container was bound to the CO row.' });
@@ -2119,7 +2297,7 @@ export default function MyProduceDashboard() {
 
     await handleInlineCuttingOrderRowUpdate(selectedPplaAllocationRowForContainer, {
       containerNo: '--',
-      atwStatus: 'PENDING',
+      // atwStatus: 'PENDING',
     });
 
     toast({ title: 'Container Detached', description: 'The container was unbound from this CO row.' });
@@ -3591,7 +3769,7 @@ export default function MyProduceDashboard() {
       </div>
     </div>
   );
-
+console.log(`hex: `, pplaEditBookingDraft)
   const renderShippingDocFields = () => {
     if (selectedShippingDocType === 'Shipping Instruction') {
       return (
@@ -4701,13 +4879,14 @@ export default function MyProduceDashboard() {
                     <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Booked Vans</TableHead>
                     <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">SKU</TableHead>
                     <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Palletization</TableHead>
+                    <TableHead className="px-3 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Booking Status</TableHead>
                     <TableHead className="px-3 py-3 text-right text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {contractsLoading ? (
                     <TableRow>
-                      <TableCell colSpan={13} className="h-56 text-center">
+                      <TableCell colSpan={14} className="h-56 text-center">
                         <Loader2 className="mx-auto h-8 w-8 animate-spin text-emerald-700/50" />
                       </TableCell>
                     </TableRow>
@@ -4749,6 +4928,11 @@ export default function MyProduceDashboard() {
                         <TableCell className="px-3 py-3 text-sm font-semibold text-slate-900">{bookedVansByContractId[row.id] || 0}</TableCell>
                         <TableCell className="px-3 py-3 text-sm text-slate-700">{row.sku}</TableCell>
                         <TableCell className="px-3 py-3 text-sm text-slate-700">{row.palletization}</TableCell>
+                        <TableCell className="px-3 py-3 text-sm text-center">
+                          <Badge variant={row.bookingStatus === 'Booking Confirmed' ? 'default' : row.bookingStatus === 'Booking Created' ? 'secondary' : 'outline'}>
+                            {row.bookingStatus || 'Empty'}
+                          </Badge>
+                        </TableCell>
                         <TableCell className="px-3 py-3 text-right" onClick={(event) => event.stopPropagation()}>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -5257,8 +5441,17 @@ export default function MyProduceDashboard() {
             setSelectedPplaLARowForBookings(null);
             setPplaBookingModalTab('add-new');
             setIsPplaAddBookingFormOpen(false);
+            setSelectedPplaBookingForEdit(null);
             setSelectedPplaExistingBookingKeys([]);
             setPplaNewBookingDraft({
+              bookingNumber: '',
+              shippingLine: '',
+              vesselName: '',
+              pod: '',
+              attachmentUrl: '',
+              containersConfirmed: 0,
+            });
+            setPplaEditBookingDraft({
               bookingNumber: '',
               shippingLine: '',
               vesselName: '',
@@ -5269,182 +5462,259 @@ export default function MyProduceDashboard() {
           }
         }}
       >
-        <DialogContent className="max-w-4xl p-0 overflow-hidden bg-white border-none shadow-2xl">
-          <div className="p-6 border-b flex justify-between items-center">
+        <DialogContent className="max-w-4xl p-0 overflow-hidden bg-white border-none shadow-2xl max-h-[90vh] flex flex-col">
+          <div className="p-6 border-b flex justify-between items-center flex-shrink-0">
             <DialogTitle className="text-xl font-bold text-gray-900 tracking-tight">Associated Bookings</DialogTitle>
             <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400" onClick={() => setIsPplaBookingsModalOpen(false)}>
               <X className="h-5 w-5" />
             </Button>
           </div>
-          <div className="px-6 pt-4 text-xs text-slate-500">
-            LA: <span className="font-semibold text-slate-800">{selectedPplaLARowForBookings?.contractId || '--'}</span>
-          </div>
-          <div className="p-6">
-            <Table>
-              <TableHeader className="bg-gray-50/60">
-                <TableRow>
-                  <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Booking No.</TableHead>
-                  <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Shipping Line</TableHead>
-                  <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Vessel</TableHead>
-                  <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">POD</TableHead>
-                  <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Attachment</TableHead>
-                  <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Containers Confirmed</TableHead>
-                  <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Week No.</TableHead>
-                  <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-right text-slate-500">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pplaAssociatedBookings.length > 0 ? (
-                  pplaAssociatedBookings.map((booking) => (
-                    <TableRow key={`${booking.batchId}-${booking.id}`}>
-                      <TableCell className="text-sm font-semibold text-slate-900">{booking.bookingNumber}</TableCell>
-                      <TableCell className="text-sm text-slate-700">{booking.shippingLine}</TableCell>
-                      <TableCell className="text-sm text-slate-700">{booking.vesselName}</TableCell>
-                      <TableCell className="text-sm text-slate-700">{booking.pod || '--'}</TableCell>
-                      <TableCell className="text-sm text-slate-700">{booking.attachmentUrl || '--'}</TableCell>
-                      <TableCell className="text-sm text-slate-700">{booking.containersConfirmed ?? 0}</TableCell>
-                      <TableCell className="text-sm text-slate-700">{booking.weekNumber}</TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="outline"
-                          className="h-8 px-3 text-[10px] font-bold uppercase tracking-[0.14em]"
-                          onClick={() => handleDetachPplaBooking(booking)}
-                        >
-                          Detach
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={8} className="h-40 text-center text-sm text-slate-500">
-                      No bookings are bound to this loading advice yet.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-
-            <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50/60">
-              <Tabs value={pplaBookingModalTab} onValueChange={(value) => setPplaBookingModalTab(value as PplaBookingModalTab)}>
-                <div className="border-b border-slate-200 px-4 pt-4">
-                  <TabsList className="bg-transparent p-0 h-auto gap-6">
-                    <TabsTrigger  value="add-new" className="rounded-none border-b-2 border-transparent px-0 py-2 text-xs font-bold uppercase tracking-[0.16em] data-[state=active]:border-anflocor-green data-[state=active]:bg-transparent">Add New Booking</TabsTrigger>
-                    <TabsTrigger value="bind-existing" className="rounded-none border-b-2 border-transparent px-0 py-2 text-xs font-bold uppercase tracking-[0.16em] data-[state=active]:border-anflocor-green data-[state=active]:bg-transparent">Bind Existing Bookings</TabsTrigger>
-                  </TabsList>
-                </div>
-
-                <TabsContent value="add-new" className="m-0 p-4 space-y-4">
-                  <button
-                    type="button"
-                    className="w-full rounded-md border border-dashed border-slate-300 bg-white px-4 py-3 text-left text-xs font-bold uppercase tracking-[0.14em] text-slate-600 hover:bg-slate-50"
-                    onClick={() => setIsPplaAddBookingFormOpen((current) => !current)}
-                  >
-                    <Plus className="mr-2 inline h-4 w-4" /> Add Booking Row
-                  </button>
-
-                  {isPplaAddBookingFormOpen && (
-                    <div className="rounded-md border bg-white p-4">
-                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                        <div className="space-y-1">
-                          <Label className="text-[10px] font-bold uppercase text-slate-500">Booking No</Label>
-                          <Input value={pplaNewBookingDraft.bookingNumber} onChange={(e) => setPplaNewBookingDraft((current) => ({ ...current, bookingNumber: e.target.value }))} />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-[10px] font-bold uppercase text-slate-500">Shipping Line</Label>
-                          <Input value={pplaNewBookingDraft.shippingLine} onChange={(e) => setPplaNewBookingDraft((current) => ({ ...current, shippingLine: e.target.value }))} />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-[10px] font-bold uppercase text-slate-500">Vessel</Label>
-                          <Input value={pplaNewBookingDraft.vesselName} onChange={(e) => setPplaNewBookingDraft((current) => ({ ...current, vesselName: e.target.value }))} />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-[10px] font-bold uppercase text-slate-500">POD</Label>
-                          <Input value={pplaNewBookingDraft.pod} onChange={(e) => setPplaNewBookingDraft((current) => ({ ...current, pod: e.target.value }))} />
-                        </div>
-                        <div className="space-y-1 md:col-span-2">
-                          <Label className="text-[10px] font-bold uppercase text-slate-500">Attachments</Label>
-                          <Input placeholder="Attachment URL or filename" value={pplaNewBookingDraft.attachmentUrl} onChange={(e) => setPplaNewBookingDraft((current) => ({ ...current, attachmentUrl: e.target.value }))} />
-                        </div>
-                        <div className="space-y-1 md:col-span-2">
-                          <Label className="text-[10px] font-bold uppercase text-slate-500">Containers Confirmed</Label>
-                          <Input
-                            type="number"
-                            min={0}
-                            value={pplaNewBookingDraft.containersConfirmed}
-                            onChange={(e) =>
-                              setPplaNewBookingDraft((current) => ({
-                                ...current,
-                                containersConfirmed: Math.max(0, Number(e.target.value || 0)),
-                              }))
-                            }
-                          />
-                        </div>
-                      </div>
-                      <div className="mt-4 flex justify-end">
-                        <Button className="bg-anflocor-green text-white hover:bg-anflocor-green/90" onClick={handleCreatePplaBooking}>Submit</Button>
-                      </div>
-                    </div>
-                  )}
-                </TabsContent>
-
-                <TabsContent value="bind-existing" className="m-0 p-4 space-y-3">
-                  <div className="flex justify-end">
-                    <Button className="bg-anflocor-green text-white hover:bg-anflocor-green/90" onClick={handleBindExistingPplaBookings}>Save</Button>
-                  </div>
-                  <div className="rounded-md border bg-white overflow-hidden">
-                    <Table>
-                      <TableHeader className="bg-slate-100/80">
-                        <TableRow>
-                          <TableHead className="w-12 text-center text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500"> </TableHead>
-                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Booking No</TableHead>
-                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Shipping Line</TableHead>
-                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">POD</TableHead>
-                          <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Attachment</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {pplaExistingBookingsToBind.length > 0 ? (
-                          pplaExistingBookingsToBind.map((booking) => (
-                            <TableRow key={pplaExistingBookingKey(booking)}>
-                              <TableCell className="text-center">
-                                <Checkbox
-                                  checked={selectedPplaExistingBookingKeys.includes(pplaExistingBookingKey(booking))}
-                                  onCheckedChange={(checked) => {
-                                    const key = pplaExistingBookingKey(booking);
-                                    setSelectedPplaExistingBookingKeys((current) =>
-                                      checked
-                                        ? [...new Set([...current, key])]
-                                        : current.filter((item) => item !== key)
-                                    );
-                                  }}
-                                />
-                              </TableCell>
-                              <TableCell className="text-sm font-semibold text-slate-900">{booking.bookingNumber}</TableCell>
-                              <TableCell className="text-sm text-slate-700">{booking.shippingLine}</TableCell>
-                              <TableCell className="text-sm text-slate-700">{booking.pod}</TableCell>
-                              <TableCell className="text-sm text-slate-700">{booking.attachmentUrl || '--'}</TableCell>
-                            </TableRow>
-                          ))
-                        ) : (
-                          <TableRow>
-                            <TableCell colSpan={5} className="h-28 text-center text-sm text-slate-500">
-                              No existing bookings available to bind.
-                            </TableCell>
-                          </TableRow>
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </TabsContent>
-              </Tabs>
+          <div className="overflow-y-auto flex-1 flex flex-col">
+            <div className="px-6 pt-4 text-xs text-slate-500 flex-shrink-0">
+              LA: <span className="font-semibold text-slate-800">{selectedPplaLARowForBookings?.contractId || '--'}</span>
             </div>
+            <div className="p-6 flex-1 overflow-hidden flex flex-col">
+              <div className="overflow-x-auto flex-shrink-0 mb-6">
+                <Table>
+                  <TableHeader className="bg-gray-50/60">
+                    <TableRow>
+                      <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Booking No.</TableHead>
+                      <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Shipping Line</TableHead>
+                      <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Vessel</TableHead>
+                      <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">POD</TableHead>
+                      <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Attachment</TableHead>
+                      <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Containers Confirmed</TableHead>
+                      <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Week No.</TableHead>
+                      <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-right text-slate-500">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pplaAssociatedBookings.length > 0 ? (
+                      pplaAssociatedBookings.map((booking) => (
+                        <TableRow key={`${booking.batchId}-${booking.id}`}>
+                          <TableCell className="text-sm font-semibold text-slate-900">{booking.bookingNumber}</TableCell>
+                          <TableCell className="text-sm text-slate-700">{booking.shippingLine}</TableCell>
+                          <TableCell className="text-sm text-slate-700">{booking.vesselName}</TableCell>
+                          <TableCell className="text-sm text-slate-700">{booking.pod || '--'}</TableCell>
+                          <TableCell className="text-sm text-slate-700">{booking.attachmentUrl || '--'}</TableCell>
+                          <TableCell className="text-sm text-slate-700">{booking.containersConfirmed ?? 0}</TableCell>
+                          <TableCell className="text-sm text-slate-700">{booking.weekNumber}</TableCell>
+                          <TableCell className="text-right space-x-2 flex justify-end">
+                            <Button
+                              variant="outline"
+                              className="h-8 px-3 text-[10px] font-bold uppercase tracking-[0.14em]"
+                              onClick={() => {
+                                // Find and set the corresponding LA for this booking
+                                const correspondingLA = loadingAdviceRows.find((row) => row.id === booking.laId);
+                                setSelectedPplaBookingForEdit(booking);
+                                setSelectedPplaLARowForBookings(correspondingLA || null);
+                                setPplaEditBookingDraft({
+                                  bookingNumber: booking.bookingNumber === '--' ? '' : booking.bookingNumber,
+                                  shippingLine: booking.shippingLine,
+                                  vesselName: booking.vesselName,
+                                  pod: booking.pod,
+                                  attachmentUrl: booking.attachmentUrl || '',
+                                  containersConfirmed: booking.containersConfirmed,
+                                });
+                                setPplaBookingModalTab('edit-booking');
+                              }}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              variant="outline"
+                              className="h-8 px-3 text-[10px] font-bold uppercase tracking-[0.14em]"
+                              onClick={() => handleDetachPplaBooking(booking)}
+                            >
+                              Detach
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={8} className="h-40 text-center text-sm text-slate-500">
+                          No bookings are bound to this loading advice yet.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
 
-            {/* <div className="mt-4 flex justify-end">
-              <Button className="bg-anflocor-green text-white hover:bg-anflocor-green/90" onClick={handleFinalizePplaBookingsModal}>
-                Final Submit
-              </Button>
-            </div> */}
+              <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50/60 flex-1 overflow-hidden flex flex-col">
+                <Tabs value={pplaBookingModalTab} onValueChange={(value) => setPplaBookingModalTab(value as PplaBookingModalTab)} className="flex flex-col h-full">
+                  <div className="border-b border-slate-200 px-4 pt-4 flex-shrink-0">
+                    <TabsList className="bg-transparent p-0 h-auto gap-6">
+                      <TabsTrigger  value="add-new" className="rounded-none border-b-2 border-transparent px-0 py-2 text-xs font-bold uppercase tracking-[0.16em] data-[state=active]:border-anflocor-green data-[state=active]:bg-transparent">Add New Booking</TabsTrigger>
+                      <TabsTrigger value="bind-existing" className="rounded-none border-b-2 border-transparent px-0 py-2 text-xs font-bold uppercase tracking-[0.16em] data-[state=active]:border-anflocor-green data-[state=active]:bg-transparent">Bind Existing Bookings</TabsTrigger>
+                      <TabsTrigger value="edit-booking" className="rounded-none border-b-2 border-transparent px-0 py-2 text-xs font-bold uppercase tracking-[0.16em] data-[state=active]:border-anflocor-green data-[state=active]:bg-transparent">Edit Booking</TabsTrigger>
+                    </TabsList>
+                  </div>
+
+                  <TabsContent value="add-new" className="m-0 p-4 space-y-4 overflow-y-auto flex-1">
+                    <button
+                      type="button"
+                      className="w-full rounded-md border border-dashed border-slate-300 bg-white px-4 py-3 text-left text-xs font-bold uppercase tracking-[0.14em] text-slate-600 hover:bg-slate-50"
+                      onClick={() => setIsPplaAddBookingFormOpen((current) => !current)}
+                    >
+                      <Plus className="mr-2 inline h-4 w-4" /> Add Booking Row
+                    </button>
+
+                    {isPplaAddBookingFormOpen && (
+                      <div className="rounded-md border bg-white p-4">
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                          <div className="space-y-1">
+                            <Label className="text-[10px] font-bold uppercase text-slate-500">Booking No</Label>
+                            <Input value={pplaNewBookingDraft.bookingNumber} onChange={(e) => setPplaNewBookingDraft((current) => ({ ...current, bookingNumber: e.target.value }))} />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[10px] font-bold uppercase text-slate-500">Shipping Line</Label>
+                            <Input value={pplaNewBookingDraft.shippingLine} onChange={(e) => setPplaNewBookingDraft((current) => ({ ...current, shippingLine: e.target.value }))} />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[10px] font-bold uppercase text-slate-500">Vessel</Label>
+                            <Input value={pplaNewBookingDraft.vesselName} onChange={(e) => setPplaNewBookingDraft((current) => ({ ...current, vesselName: e.target.value }))} />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[10px] font-bold uppercase text-slate-500">POD</Label>
+                            <Input value={pplaNewBookingDraft.pod} onChange={(e) => setPplaNewBookingDraft((current) => ({ ...current, pod: e.target.value }))} />
+                          </div>
+                          <div className="space-y-1 md:col-span-2">
+                            <Label className="text-[10px] font-bold uppercase text-slate-500">Attachments</Label>
+                            <Input placeholder="Attachment URL or filename" value={pplaNewBookingDraft.attachmentUrl} onChange={(e) => setPplaNewBookingDraft((current) => ({ ...current, attachmentUrl: e.target.value }))} />
+                          </div>
+                          <div className="space-y-1 md:col-span-2">
+                            <Label className="text-[10px] font-bold uppercase text-slate-500">Containers Confirmed</Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              value={pplaNewBookingDraft.containersConfirmed}
+                              onChange={(e) =>
+                                setPplaNewBookingDraft((current) => ({
+                                  ...current,
+                                  containersConfirmed: Math.max(0, Number(e.target.value || 0)),
+                                }))
+                              }
+                            />
+                          </div>
+                        </div>
+                        <div className="mt-4 flex justify-end">
+                          <Button className="bg-anflocor-green text-white hover:bg-anflocor-green/90" onClick={handleCreatePplaBooking}>Submit</Button>
+                        </div>
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="bind-existing" className="m-0 p-4 space-y-3 overflow-y-auto flex-1">
+                    <div className="flex justify-end">
+                      <Button className="bg-anflocor-green text-white hover:bg-anflocor-green/90" onClick={handleBindExistingPplaBookings}>Save</Button>
+                    </div>
+                    <div className="rounded-md border bg-white overflow-hidden">
+                      <Table>
+                        <TableHeader className="bg-slate-100/80">
+                          <TableRow>
+                            <TableHead className="w-12 text-center text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500"> </TableHead>
+                            <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Booking No</TableHead>
+                            <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Shipping Line</TableHead>
+                            <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">POD</TableHead>
+                            <TableHead className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Attachment</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {pplaExistingBookingsToBind.length > 0 ? (
+                            pplaExistingBookingsToBind.map((booking) => (
+                              <TableRow key={pplaExistingBookingKey(booking)}>
+                                <TableCell className="text-center">
+                                  <Checkbox
+                                    checked={selectedPplaExistingBookingKeys.includes(pplaExistingBookingKey(booking))}
+                                    onCheckedChange={(checked) => {
+                                      const key = pplaExistingBookingKey(booking);
+                                      setSelectedPplaExistingBookingKeys((current) =>
+                                        checked
+                                          ? [...new Set([...current, key])]
+                                          : current.filter((item) => item !== key)
+                                      );
+                                    }}
+                                  />
+                                </TableCell>
+                                <TableCell className="text-sm font-semibold text-slate-900">{booking.bookingNumber}</TableCell>
+                                <TableCell className="text-sm text-slate-700">{booking.shippingLine}</TableCell>
+                                <TableCell className="text-sm text-slate-700">{booking.pod}</TableCell>
+                                <TableCell className="text-sm text-slate-700">{booking.attachmentUrl || '--'}</TableCell>
+                              </TableRow>
+                            ))
+                          ) : (
+                            <TableRow>
+                              <TableCell colSpan={5} className="h-28 text-center text-sm text-slate-500">
+                                No existing bookings available to bind.
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="edit-booking" className="m-0 p-4 space-y-4 overflow-y-auto flex-1">
+                    {selectedPplaBookingForEdit ? (
+                      <div>
+                        <div className="mb-4">
+                          <h3 className="text-sm font-semibold text-slate-700 mb-2">Editing Booking</h3>
+                          <p className="text-xs text-slate-500">Current Status: <Badge className="ml-2" variant={selectedPplaBookingForEdit.bookingStatus === 'Booking Confirmed' ? 'default' : 'secondary'}>{selectedPplaBookingForEdit.bookingStatus || 'Booking Created'}</Badge></p>
+                        </div>
+                        <div className="rounded-md border bg-white p-4">
+                          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                            <div className="space-y-1">
+                              <Label className="text-[10px] font-bold uppercase text-slate-500">Booking No (leave empty if not yet assigned)</Label>
+                              <Input value={pplaEditBookingDraft.bookingNumber} onChange={(e) => setPplaEditBookingDraft((current) => ({ ...current, bookingNumber: e.target.value }))} />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-[10px] font-bold uppercase text-slate-500">Shipping Line</Label>
+                              <Input value={pplaEditBookingDraft.shippingLine} onChange={(e) => setPplaEditBookingDraft((current) => ({ ...current, shippingLine: e.target.value }))} />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-[10px] font-bold uppercase text-slate-500">Vessel</Label>
+                              <Input value={pplaEditBookingDraft.vesselName} onChange={(e) => setPplaEditBookingDraft((current) => ({ ...current, vesselName: e.target.value }))} />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-[10px] font-bold uppercase text-slate-500">POD</Label>
+                              <Input value={pplaEditBookingDraft.pod} onChange={(e) => setPplaEditBookingDraft((current) => ({ ...current, pod: e.target.value }))} />
+                            </div>
+                            <div className="space-y-1 md:col-span-2">
+                              <Label className="text-[10px] font-bold uppercase text-slate-500">Attachments</Label>
+                              <Input placeholder="Attachment URL or filename" value={pplaEditBookingDraft.attachmentUrl} onChange={(e) => setPplaEditBookingDraft((current) => ({ ...current, attachmentUrl: e.target.value }))} />
+                            </div>
+                            <div className="space-y-1 md:col-span-2">
+                              <Label className="text-[10px] font-bold uppercase text-slate-500">Containers Confirmed</Label>
+                              <Input
+                                type="number"
+                                min={0}
+                                value={pplaEditBookingDraft.containersConfirmed}
+                                onChange={(e) =>
+                                  setPplaEditBookingDraft((current) => ({
+                                    ...current,
+                                    containersConfirmed: Math.max(0, Number(e.target.value || 0)),
+                                  }))
+                                }
+                              />
+                            </div>
+                          </div>
+                          <div className="mt-4 flex justify-end gap-2">
+                            <Button variant="outline" onClick={() => { setSelectedPplaBookingForEdit(null); setPplaBookingModalTab('bind-existing'); }}>Cancel</Button>
+                            <Button className="bg-anflocor-green text-white hover:bg-anflocor-green/90" onClick={handleEditPplaBooking}>Update Booking</Button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="h-40 text-center text-sm text-slate-500 flex items-center justify-center">
+                        Select an Edit button from a booking row to edit it here.
+                      </div>
+                    )}
+                  </TabsContent>
+                </Tabs>
+              </div>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
